@@ -14,7 +14,7 @@ export default function LoginPage() {
         </div>
 
         {/* টেক্সট অংশ */}
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">স্বাগতম!</h1>
+        <h1 className="text-2xl font-bold text-slate-800 mb-2">স্বাগতম!..</h1>
         <p className="text-slate-500 mb-8">আপনার কুইজ যাত্রা শুরু করতে গুগল দিয়ে লগইন করুন</p>
 
         {/* গুগল লগইন বাটন */}
