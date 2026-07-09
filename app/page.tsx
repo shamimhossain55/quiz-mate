@@ -27,7 +27,7 @@ export default function LoginPage() {
             alt="Google" 
             className="w-5 h-5" 
           />
-          Google দিয়ে লগইন করুন
+          Google দিয়ে লগইন/রেজিস্টেশন করুন।
         </button>
 
         {/* ফুটার টেক্সট */}
