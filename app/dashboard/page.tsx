@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   Home,
   Trophy,
@@ -18,19 +19,23 @@ import {
   LucideIcon,
 } from "lucide-react";
 
-/**
- * Student Dashboard Page
- * কালার থিম: টিল + কোরাল
- * টার্গেট: Class 8 - Class 12 কুইজ পোর্টাল, মোবাইল-ফার্স্ট
- * লেআউট: হেডার + স্ট্যাটস ফিক্সড, ব্যানার + সাবজেক্ট গ্রিড স্ক্রলযোগ্য, বটম ন্যাভ ফিক্সড
- */
-
 type Subject = {
   id: string;
   name: string;
   icon: LucideIcon;
   cover: string;
   spine: string;
+};
+
+type StudentData = {
+  name: string;
+  email: string;
+  photoUrl: string | null;
+  className: string;
+  group: string;
+  totalExam: number;
+  point: number;
+  rank: number | null;
 };
 
 const subjects: Subject[] = [
@@ -52,16 +57,49 @@ const tabs = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [activeTab, setActiveTab] = useState("home");
+  const [student, setStudent] = useState<StudentData | null>(null);
+  const [loadingData, setLoadingData] = useState(true);
 
-  // এখানে পরে Firestore থেকে আসল ডেটা fetch করে বসাবেন
-  const student = {
-    name: "শামীম হোসেন",
-    className: "Class 10",
-    group: "Commerce",
-    avatarUrl: null as string | null,
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/");
+    }
+  }, [status, router]);
+
+  useEffect(() => {
+    async function fetchStudentData() {
+      try {
+        const res = await fetch("/api/student-data");
+        if (!res.ok) throw new Error("ডেটা আনতে সমস্যা হয়েছে");
+        const data = await res.json();
+        setStudent(data.student);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoadingData(false);
+      }
+    }
+
+    if (status === "authenticated") {
+      fetchStudentData();
+    }
+  }, [status]);
+
+  if (status === "loading" || !session || loadingData || !student) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <div className="h-10 w-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const stats = {
+    totalExam: student.totalExam,
+    point: student.point,
+    rank: student.rank ?? "-",
   };
-  const stats = { totalExam: 12, point: 850, rank: 5 };
   const banner = {
     title: "নতুন কুইজ যুক্ত হয়েছে",
     subtitle: "বাংলা ২য় পত্র - ব্যাকরণ অংশ",
@@ -71,18 +109,17 @@ export default function DashboardPage() {
   return (
     <div className="h-screen bg-slate-50 font-sans flex flex-col">
       <div className="mx-auto w-full max-w-sm flex flex-col flex-1 min-h-0">
-        {/* ফিক্সড টপ সেকশন: হেডার + স্ট্যাটস */}
         <div className="flex-shrink-0 bg-slate-50 relative z-10 shadow-[0_4px_10px_-6px_rgba(15,23,42,0.12)]">
-          {/* হেডার */}
           <div className="flex items-center justify-between px-5 pt-6 pb-4">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 overflow-hidden rounded-full ring-2 ring-teal-200 bg-teal-50 flex items-center justify-center">
-                {student.avatarUrl ? (
+                {student.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={student.avatarUrl}
+                    src={student.photoUrl}
                     alt={student.name}
                     className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 ) : (
                   <span className="text-teal-700 font-medium text-sm">
@@ -119,7 +156,6 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* স্ট্যাটস কার্ড - 3D লুক */}
           <div className="grid grid-cols-3 gap-3 px-5 pb-4">
             <StatCard label="Total exam" value={stats.totalExam} tone="teal" />
             <StatCard label="Point" value={stats.point} tone="coral" />
@@ -127,9 +163,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* স্ক্রলযোগ্য মিডল সেকশন: ব্যানার + সাবজেক্ট গ্রিড */}
         <div className="flex-1 min-h-0 overflow-y-auto pb-6">
-          {/* ব্যানার */}
           <div className="mx-5 mt-4 rounded-2xl bg-teal-600 px-5 py-5 text-white">
             <p className="text-sm font-medium opacity-90">{banner.subtitle}</p>
             <p className="text-lg font-medium mt-1">{banner.title}</p>
@@ -140,7 +174,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* সাবজেক্ট গ্রিড - বইয়ের মতো কার্ড */}
           <div className="px-5 mt-6">
             <p className="text-sm font-medium text-slate-500 mb-3">বিষয়সমূহ</p>
             <div className="grid grid-cols-3 gap-4">
@@ -156,7 +189,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ফিক্সড বটম ন্যাভিগেশন */}
       <div className="flex-shrink-0 bg-white border-t border-slate-200">
         <div className="mx-auto max-w-sm flex items-center justify-between px-6 py-3">
           {tabs.map((tab) => {
@@ -225,10 +257,6 @@ function StatCard({
   );
 }
 
-/**
- * BookCard
- * প্রতিটা সাবজেক্ট কার্ডকে একটা real 3D বইয়ের মতো দেখায়
- */
 function BookCard({
   subject,
   onClick,
@@ -243,7 +271,6 @@ function BookCard({
       onClick={onClick}
       className="group relative h-32 w-full [perspective:600px] active:scale-[0.97] transition-transform"
     >
-      {/* পাতার লেয়ার - বইয়ের ডানদিকে পুরুত্ব বোঝায় */}
       <span
         className="absolute top-1 -right-1 h-[calc(100%-8px)] w-full rounded-r-md rounded-l-sm"
         style={{ background: "#F4F4F5", boxShadow: "1px 0 0 #E4E4E7" }}
@@ -253,7 +280,6 @@ function BookCard({
         style={{ background: "#FAFAFA", boxShadow: "1px 0 0 #EAEAEA" }}
       />
 
-      {/* বইয়ের কভার */}
       <div
         className="relative h-full w-full rounded-r-md rounded-l-sm overflow-hidden transition-transform duration-200 group-hover:-rotate-1 group-hover:-translate-y-0.5"
         style={{
@@ -262,7 +288,6 @@ function BookCard({
             "0 10px 18px -6px rgba(15, 23, 42, 0.28), inset -2px 0 3px rgba(0,0,0,0.15)",
         }}
       >
-        {/* স্পাইন */}
         <span
           className="absolute left-0 top-0 h-full w-2"
           style={{
@@ -270,7 +295,6 @@ function BookCard({
             boxShadow: "1px 0 2px rgba(0,0,0,0.2) inset",
           }}
         />
-        {/* কভারের উপর হালকা গ্লস */}
         <span
           className="absolute inset-0"
           style={{
