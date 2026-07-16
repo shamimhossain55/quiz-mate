@@ -21,8 +21,10 @@ export async function GET() {
       name: session.user.name ?? "শিক্ষার্থী",
       email: email,
       photoUrl: session.user.image ?? null,
-      className: "Class 10",
-      group: "Commerce",
+      classId: null as string | null, // যেমন: "class6", "class9_10" — onboarding এ সেট হবে
+      className: null as string | null, // display নাম, যেমন: "Class 6", "Class 9-10 (SSC)"
+      group: null as string | null, // "science" | "commerce" | "arts" — শুধু hasGroups=true ক্লাসের জন্য
+      profileComplete: false,
       totalExam: 0,
       point: 0,
       rank: null,

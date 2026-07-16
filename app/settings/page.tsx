@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
-  Home,
-  Trophy,
-  TrendingUp,
-  Users,
-  Settings as SettingsIcon,
   Camera,
   User,
   Phone,
@@ -19,20 +14,13 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
+import BottomNav from "@/components/layout/BottomNav";
 
 /**
  * Settings (সেটিংস) Page
  * কালার থিম: টিল + কোরাল (আগের পেজগুলোর সাথে মিলিয়ে)
  * ফিক্সড হেডার + প্রোফাইল অ্যাভাটার, স্ক্রলযোগ্য পিল-শেপ ফিল্ড লিস্ট + Log out, ফিক্সড বটম ন্যাভ
  */
-
-const tabs = [
-  { id: "home", label: "হোম", icon: Home, path: "/dashboard" },
-  { id: "leaderboard", label: "র‍্যাঙ্ক", icon: Trophy, path: "/leaderboard" },
-  { id: "progress", label: "উন্নতি", icon: TrendingUp, path: "/progress" },
-  { id: "community", label: "সবাই", icon: Users, path: "/community" },
-  { id: "settings", label: "সেটিংস", icon: SettingsIcon, path: "/settings" },
-];
 
 // এখানে পরে Firestore/Auth থেকে আসল ডেটা fetch করে বসাবেন
 const user = {
@@ -45,14 +33,11 @@ const user = {
 };
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState("settings");
   const [showPassword, setShowPassword] = useState(false);
 
   const handleLogout = () => {
-    // এখানে Firebase Auth signOut() কল করে redirect করবেন
-    console.log("লগ আউট করা হচ্ছে...");
-  };
+  signOut({ callbackUrl: "/" });
+};
 
   return (
     <div className="h-screen bg-slate-50 font-sans flex flex-col">
@@ -130,40 +115,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ফিক্সড বটম ন্যাভিগেশন */}
-      <div className="flex-shrink-0 bg-white border-t border-slate-200">
-        <div className="mx-auto max-w-sm flex items-center justify-between px-6 py-3">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  router.push(tab.path);
-                }}
-                className="flex flex-col items-center gap-1 flex-1"
-              >
-                <Icon
-                  size={20}
-                  className={isActive ? "text-teal-700" : "text-slate-400"}
-                />
-                <span
-                  className={`text-[10px] font-medium ${
-                    isActive ? "text-teal-700" : "text-slate-400"
-                  }`}
-                >
-                  {tab.label}
-                </span>
-                {isActive && (
-                  <span className="h-1 w-1 rounded-full bg-teal-700 mt-0.5" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <BottomNav activeTab="settings" />
     </div>
   );
 }

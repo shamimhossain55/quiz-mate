@@ -1,13 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
-  Home,
-  Trophy,
-  TrendingUp,
-  Users,
-  Settings,
   Flame,
   Target,
   Award,
@@ -21,6 +14,7 @@ import {
   Languages,
   LucideIcon,
 } from "lucide-react";
+import BottomNav from "@/components/layout/BottomNav";
 
 /**
  * Progress (উন্নতি) Page
@@ -54,14 +48,6 @@ type Attempt = {
   durationMin: number;
 };
 
-const tabs = [
-  { id: "home", label: "হোম", icon: Home, path: "/dashboard" },
-  { id: "leaderboard", label: "র‍্যাঙ্ক", icon: Trophy, path: "/leaderboard" },
-  { id: "progress", label: "উন্নতি", icon: TrendingUp, path: "/progress" },
-  { id: "community", label: "সবাই", icon: Users, path: "/community" },
-  { id: "settings", label: "সেটিংস", icon: Settings, path: "/settings" },
-];
-
 // এখানে পরে Firestore থেকে আসল ডেটা fetch করে বসাবেন
 const overview = {
   totalQuiz: 42,
@@ -93,9 +79,6 @@ const attempts: Attempt[] = [
 ];
 
 export default function ProgressPage() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState("progress");
-
   return (
     <div className="h-screen bg-slate-50 font-sans flex flex-col">
       <div className="mx-auto w-full max-w-sm flex flex-col flex-1 min-h-0">
@@ -158,40 +141,7 @@ export default function ProgressPage() {
         </div>
       </div>
 
-      {/* ফিক্সড বটম ন্যাভিগেশন */}
-      <div className="flex-shrink-0 bg-white border-t border-slate-200">
-        <div className="mx-auto max-w-sm flex items-center justify-between px-6 py-3">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  router.push(tab.path);
-                }}
-                className="flex flex-col items-center gap-1 flex-1"
-              >
-                <Icon
-                  size={20}
-                  className={isActive ? "text-teal-700" : "text-slate-400"}
-                />
-                <span
-                  className={`text-[10px] font-medium ${
-                    isActive ? "text-teal-700" : "text-slate-400"
-                  }`}
-                >
-                  {tab.label}
-                </span>
-                {isActive && (
-                  <span className="h-1 w-1 rounded-full bg-teal-700 mt-0.5" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <BottomNav activeTab="progress" />
     </div>
   );
 }

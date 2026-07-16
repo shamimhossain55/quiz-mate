@@ -1,17 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Home,
-  Trophy,
-  TrendingUp,
-  Users,
-  Crown,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-} from "lucide-react";
+import { Crown, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import BottomNav from "@/components/layout/BottomNav";
 
 /**
  * Leaderboard Page
@@ -28,13 +18,6 @@ type Player = {
   prevRank: number; // আগের র‍্যাঙ্ক - প্রমোশন/ডিমোশন বের করার জন্য
 };
 
-const tabs = [
-  { id: "home", label: "হোম", icon: Home, path: "/dashboard" },
-  { id: "leaderboard", label: "র‍্যাঙ্ক", icon: Trophy, path: "/leaderboard" },
-  { id: "progress", label: "উন্নতি", icon: TrendingUp, path: "/progress" },
-  { id: "community", label: "সবাই", icon: Users, path: "/community" },
-];
-
 // এখানে পরে Firestore থেকে আসল ডেটা fetch করে বসাবেন (point অনুযায়ী sorted, prevRank আগের সপ্তাহের ডেটা থেকে)
 const players: Player[] = [
   { uid: "u1", name: "আয়েশা রহমান", point: 1240, avatarUrl: null, prevRank: 2 },
@@ -50,9 +33,6 @@ const players: Player[] = [
 const currentUserUid = "u5"; // লগইন করা ইউজারের uid
 
 export default function LeaderboardPage() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState("leaderboard");
-
   const top3 = players.slice(0, 3);
   const rest = players.slice(3);
 
@@ -88,35 +68,7 @@ export default function LeaderboardPage() {
         </div>
       </div>
 
-      {/* ফিক্সড বটম ন্যাভিগেশন */}
-      <div className="flex-shrink-0 bg-white border-t border-slate-200">
-        <div className="mx-auto max-w-sm flex items-center justify-between px-6 py-3">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  router.push(tab.path);
-                }}
-                className="flex flex-col items-center gap-1 flex-1"
-              >
-                <Icon size={20} className={isActive ? "text-teal-700" : "text-slate-400"} />
-                <span
-                  className={`text-[10px] font-medium ${
-                    isActive ? "text-teal-700" : "text-slate-400"
-                  }`}
-                >
-                  {tab.label}
-                </span>
-                {isActive && <span className="h-1 w-1 rounded-full bg-teal-700 mt-0.5" />}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <BottomNav activeTab="leaderboard" />
     </div>
   );
 }
