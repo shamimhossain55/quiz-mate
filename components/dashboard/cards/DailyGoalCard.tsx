@@ -14,12 +14,12 @@ export default function DailyGoalCard() {
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Complete today's learning target.
+            Complete today&apos;s learning target.
           </p>
         </div>
 
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-100">
-          <Target className="text-green-600" size={28} />
+          <Target className="text-green-600" width={28} height={28} />
         </div>
 
       </div>
@@ -52,7 +52,7 @@ export default function DailyGoalCard() {
 
           <CheckCircle2
             className="text-green-600"
-            size={24}
+            width={24} height={24}
           />
 
           <div>
@@ -62,7 +62,7 @@ export default function DailyGoalCard() {
             </p>
 
             <p className="text-sm text-slate-500">
-              Only 3 quizzes left to reach today's goal.
+              Only 3 quizzes left to reach today&apos;s goal.
             </p>
 
           </div>

@@ -37,12 +37,12 @@ export default function ContinueLearningBanner({
           <div className="mt-6 flex flex-wrap gap-6 text-sm">
 
             <div className="flex items-center gap-2">
-              <BookOpen size={18} />
+              <BookOpen width={18} height={18} />
               <span>{progress}% Completed</span>
             </div>
 
             <div className="flex items-center gap-2">
-              <Clock size={18} />
+              <Clock width={18} height={18} />
               <span>{estimatedTime} remaining</span>
             </div>
 
@@ -72,7 +72,7 @@ export default function ContinueLearningBanner({
           >
             Continue Learning
 
-            <ArrowRight size={18} />
+            <ArrowRight width={18} height={18} />
           </Button>
 
         </div>

@@ -9,7 +9,7 @@ interface WelcomeCardProps {
 }
 
 export default function WelcomeCard({
-  userName = "Shamim",
+  // userName prop reserved for future use
 }: WelcomeCardProps) {
   return (
     <Card

@@ -66,7 +66,7 @@ export default function Sidebar() {
               href={item.href}
               className="flex items-center gap-3 rounded-xl px-4 py-3 text-slate-600 transition-all duration-200 hover:bg-blue-50 hover:text-blue-600"
             >
-              <Icon size={20} />
+              <Icon width={20} height={20} />
               <span className="font-medium">{item.title}</span>
             </Link>
           );
@@ -96,7 +96,7 @@ export default function Sidebar() {
 
         <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-50 py-3 font-medium text-red-600 transition hover:bg-red-100">
 
-          <LogOut size={18} />
+          <LogOut width={18} height={18} />
 
           Logout
 

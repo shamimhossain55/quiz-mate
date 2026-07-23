@@ -138,7 +138,7 @@ export default function OnboardingPage() {
                   >
                     {cls.name}
                   </span>
-                  {isSelected && <CheckCircle2 size={18} className="text-teal-600" />}
+                  {isSelected && <CheckCircle2 width={18} height={18} className="text-teal-600" />}
                 </button>
               );
             })}
@@ -171,7 +171,7 @@ export default function OnboardingPage() {
                         {grp.label}
                       </span>
                       {isSelected && (
-                        <CheckCircle2 size={18} className="text-teal-600" />
+                        <CheckCircle2 width={18} height={18} className="text-teal-600" />
                       )}
                     </button>
                   );

@@ -9,7 +9,7 @@ export default function WelcomeHeader() {
       <div>
 
         <Badge className="mb-5 bg-white/15 text-white border-white/20">
-          <Sparkles size={14} />
+          <Sparkles width={14} height={14} />
           Level 12
         </Badge>
 
@@ -38,7 +38,7 @@ export default function WelcomeHeader() {
           rounded-2xl
         "
       >
-        <Play size={18} />
+        <Play width={18} height={18} />
         Start Quiz
       </Button>
 

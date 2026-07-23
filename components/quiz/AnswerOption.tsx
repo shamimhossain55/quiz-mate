@@ -34,7 +34,7 @@ export default function AnswerOption({
 
       {selected && (
         <CheckCircle2
-          size={22}
+          width={22} height={22}
           className="text-blue-600"
         />
       )}

@@ -58,7 +58,7 @@ export default function NegativeMarkingSwitch({
             }
           `}
         >
-          {value ? <X size={22} /> : <Check size={22} />}
+          {value ? <X width={22} height={22} /> : <Check width={22} height={22} />}
         </div>
       </button>
     </div>

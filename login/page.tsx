@@ -2,6 +2,7 @@
 "use client"; // যেহেতু আমরা বাটন ক্লিক হ্যান্ডেল করছি, তাই এটি ক্লায়েন্ট কম্পোনেন্ট হতে হবে
 
 import { signIn } from "next-auth/react";
+import Image from "next/image";
 
 export default function LoginPage() {
   return (
@@ -22,9 +23,11 @@ export default function LoginPage() {
           onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
           className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 text-slate-700 py-3 px-4 rounded-xl font-semibold hover:border-blue-500 hover:text-blue-600 transition-all duration-200 shadow-sm"
         >
-          <img 
+          <Image 
             src="https://www.svgrepo.com/show/355037/google.svg" 
             alt="Google" 
+            width={20}
+            height={20}
             className="w-5 h-5" 
           />
           Google দিয়ে লগইন/রেজিস্টেশন করুন।

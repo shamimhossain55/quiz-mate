@@ -12,14 +12,54 @@ import NegativeMarkingSwitch from "./NegativeMarkingSwitch";
 
 import { PlayCircle } from "lucide-react";
 
-export default function QuizSetupCard() {
-  const [questionCount, setQuestionCount] = useState(20);
-  const [timeLimit, setTimeLimit] = useState(20);
-  const [negativeMarking, setNegativeMarking] = useState(false);
+import { useQuizConfig } from "@/context/QuizConfigContext";
+import { useQuizSession } from "@/context/QuizSessionContext";
 
+import { startQuiz } from "@/lib/quiz/startQuiz";
+
+interface QuizSetupCardProps {
+  chapterId: string;
+}
+
+export default function QuizSetupCard({
+  chapterId,
+}: QuizSetupCardProps) {
   const router = useRouter();
 
+  const { setConfig } = useQuizConfig();
+
+  const { setSession } = useQuizSession();
+
+  const [questionCount, setQuestionCount] =
+    useState(20);
+
+  const [timeLimit, setTimeLimit] =
+    useState(20);
+
+  const [negativeMarking, setNegativeMarking] =
+    useState(false);
+
   function handleStartQuiz() {
+    // Save setup config
+    setConfig({
+      chapterId,
+      questionCount,
+      timeLimit,
+      negativeMarking,
+    });
+
+    // Create quiz session
+    const session = startQuiz(
+      chapterId,
+      questionCount,
+      timeLimit,
+      negativeMarking
+    );
+
+    // Save running session
+    setSession(session);
+
+    // Go to play page
     router.push("/quiz/play");
   }
 
@@ -58,6 +98,7 @@ export default function QuizSetupCard() {
         </h2>
 
         <div className="mt-5 space-y-3 text-slate-700">
+
           <div className="flex justify-between">
             <span>Questions</span>
 
@@ -78,9 +119,12 @@ export default function QuizSetupCard() {
             <span>Negative Marking</span>
 
             <span className="font-semibold">
-              {negativeMarking ? "Enabled" : "Disabled"}
+              {negativeMarking
+                ? "Enabled"
+                : "Disabled"}
             </span>
           </div>
+
         </div>
       </div>
 
@@ -89,8 +133,7 @@ export default function QuizSetupCard() {
           onClick={handleStartQuiz}
           className="w-full"
         >
-          <PlayCircle size={20} />
-
+          <PlayCircle width={20} height={20} />
           Start Quiz
         </Button>
       </div>

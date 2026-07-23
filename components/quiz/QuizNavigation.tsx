@@ -29,14 +29,14 @@ export default function QuizNavigation({
         onClick={onPrevious}
         disabled={isFirstQuestion}
       >
-        <ArrowLeft size={18} />
+        <ArrowLeft width={18} height={18} />
 
         Previous
       </Button>
 
       {isLastQuestion ? (
         <Button onClick={onFinish}>
-          <Flag size={18} />
+          <Flag width={18} height={18} />
 
           Finish Quiz
         </Button>
@@ -44,7 +44,7 @@ export default function QuizNavigation({
         <Button onClick={onNext}>
           Next
 
-          <ArrowRight size={18} />
+          <ArrowRight width={18} height={18} />
         </Button>
       )}
 

@@ -3,11 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "eslint",
+
+  "seed:subjects": "tsx scripts/seed-subjects.ts",
+  "seed:chapters": "tsx scripts/seed-chapters.ts",
+  "seed:questions": "tsx scripts/seed-questions.ts",
+  "seed:quizzes": "tsx scripts/seed-quizzes.ts"
+},
+
+
   "dependencies": {
     "clsx": "^2.1.1",
     "firebase": "^12.15.0",

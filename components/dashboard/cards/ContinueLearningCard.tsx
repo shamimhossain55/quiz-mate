@@ -4,7 +4,7 @@ import { ArrowRight, BookOpen } from "lucide-react";
 
 export default function ContinueLearningCard() {
   return (
-    <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
 
       <div className="flex items-center justify-between">
 
@@ -19,7 +19,7 @@ export default function ContinueLearningCard() {
         </div>
 
         <div className="rounded-2xl bg-blue-100 p-3">
-          <BookOpen className="text-blue-600" size={24} />
+          <BookOpen className="text-blue-600" width={24} height={24} />
         </div>
 
       </div>
@@ -68,11 +68,11 @@ export default function ContinueLearningCard() {
 
         </div>
 
-        <button className="mt-8 flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700">
+        <button className="mt-6 sm:mt-8 flex w-full sm:w-auto items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700">
 
           Continue Learning
 
-          <ArrowRight size={18} />
+          <ArrowRight width={18} height={18} />
 
         </button>
 

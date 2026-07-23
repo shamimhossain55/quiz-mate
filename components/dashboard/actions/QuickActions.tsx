@@ -38,7 +38,7 @@ export default function QuickActions() {
   return (
     <section className="mt-6">
       <div className="mb-5">
-        <h2 className="text-2xl font-bold text-slate-900">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
           Quick Actions
         </h2>
 
@@ -47,7 +47,7 @@ export default function QuickActions() {
         </p>
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:gap-5 xl:grid-cols-4">
         {actions.map((action) => (
           <ActionButton
             key={action.title}

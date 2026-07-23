@@ -6,21 +6,24 @@ import {
   Search,
 } from "lucide-react";
 
+import Logo from "@/components/ui/Logo";
+
 export default function Topbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-xl">
 
-      <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="flex h-14 sm:h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
 
         {/* Left */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
 
-          {/* Mobile Menu (পরে কাজ করবে) */}
-          <button className="rounded-xl border border-slate-200 p-2 transition hover:bg-slate-100 lg:hidden">
-            ☰
-          </button>
+          {/* Logo — only visible on mobile (sidebar hidden) */}
+          <div className="lg:hidden">
+            <Logo />
+          </div>
 
-          <div>
+          {/* Greeting — only on desktop (more space) */}
+          <div className="hidden lg:block">
             <h1 className="text-xl font-bold text-slate-900">
               শুভ সকাল 👋
             </h1>
@@ -33,12 +36,12 @@ export default function Topbar() {
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
 
-          {/* Search */}
+          {/* Search — desktop only */}
           <div className="hidden items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 lg:flex">
 
-            <Search size={18} className="text-slate-400" />
+            <Search width={18} height={18} className="text-slate-400" />
 
             <input
               type="text"
@@ -49,52 +52,34 @@ export default function Topbar() {
           </div>
 
           {/* Streak */}
-          <div className="hidden items-center gap-2 rounded-2xl bg-orange-50 px-4 py-2 md:flex">
+          <div className="hidden items-center gap-2 rounded-2xl bg-orange-50 px-3 py-2 sm:flex">
 
             <Flame
-              size={18}
+              width={16} height={16}
               className="text-orange-500"
             />
 
-            <span className="font-semibold text-orange-600">
+            <span className="text-sm font-semibold text-orange-600">
               7 Day
             </span>
 
           </div>
 
           {/* Notification */}
-
-          <button className="relative rounded-2xl border border-slate-200 p-3 transition hover:bg-slate-100">
+          <button className="relative rounded-xl border border-slate-200 p-2 sm:p-3 transition hover:bg-slate-100">
 
             <Bell
-              size={20}
+              width={18} height={18}
               className="text-slate-700"
             />
 
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500"></span>
+            <span className="absolute right-1.5 top-1.5 sm:right-2 sm:top-2 h-2 w-2 rounded-full bg-red-500"></span>
 
           </button>
 
-          {/* Profile */}
-
-          <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-purple-600 font-bold text-white">
-              S
-            </div>
-
-            <div className="hidden lg:block">
-
-              <h3 className="text-sm font-semibold text-slate-800">
-                Shamim
-              </h3>
-
-              <p className="text-xs text-slate-500">
-                Class 10 Student
-              </p>
-
-            </div>
-
+          {/* Profile avatar */}
+          <div className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-purple-600 font-bold text-white text-sm sm:text-base">
+            S
           </div>
 
         </div>
@@ -103,4 +88,4 @@ export default function Topbar() {
 
     </header>
   );
-}
+}

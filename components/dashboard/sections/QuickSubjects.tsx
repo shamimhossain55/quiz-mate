@@ -82,11 +82,11 @@ export default function QuickSubjects() {
                 <div
                   className={`flex h-12 w-12 items-center justify-center rounded-xl text-white ${subject.color}`}
                 >
-                  <Icon size={22} />
+                  <Icon width={22} height={22} />
                 </div>
 
                 <ChevronRight
-                  size={20}
+                  width={20} height={20}
                   className="text-slate-400 transition group-hover:translate-x-1 group-hover:text-blue-600"
                 />
 

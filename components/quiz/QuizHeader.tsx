@@ -21,7 +21,7 @@ export default function QuizHeader({
         {/* Left */}
         <div>
           <div className="flex items-center gap-2 text-blue-600">
-            <BookOpen size={18} />
+            <BookOpen width={18} height={18} />
 
             <span className="font-semibold">
               {subject}
@@ -36,7 +36,7 @@ export default function QuizHeader({
         {/* Right */}
         <div className="flex items-center gap-3 rounded-2xl bg-red-50 px-5 py-3">
           <Clock3
-            size={22}
+            width={22} height={22}
             className="text-red-500"
           />
 

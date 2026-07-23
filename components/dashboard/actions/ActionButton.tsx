@@ -24,7 +24,7 @@ export default function ActionButton({
       <Card
         className="
           h-full
-          p-5
+          p-4 sm:p-5
           hover:border-blue-300
           hover:bg-blue-50/40
         "
@@ -33,15 +33,15 @@ export default function ActionButton({
 
           <div
             className="
-              flex h-12 w-12 items-center justify-center
+              flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center
               rounded-2xl bg-slate-100
             "
           >
-            <Icon className={iconColor} size={24} />
+            <Icon className={iconColor} width={24} height={24} />
           </div>
 
           <ChevronRight
-            size={20}
+            width={20} height={20}
             className="
               text-slate-400
               transition-all
@@ -52,7 +52,7 @@ export default function ActionButton({
           />
         </div>
 
-        <h3 className="mt-5 text-lg font-bold text-slate-900">
+        <h3 className="mt-3 sm:mt-5 text-base sm:text-lg font-bold text-slate-900">
           {title}
         </h3>
 

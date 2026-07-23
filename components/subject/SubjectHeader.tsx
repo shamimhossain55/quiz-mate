@@ -24,7 +24,7 @@ export default function SubjectHeader({
           <div className="flex items-center gap-4">
 
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20">
-              <BookOpen size={30} />
+              <BookOpen width={30} height={30} />
             </div>
 
             <div>

@@ -5,47 +5,33 @@ import ChapterGrid from "@/components/subject/ChapterGrid";
 
 interface SubjectPageProps {
   params: Promise<{
-    subjectId: string;
+    slug: string;
   }>;
 }
 
 export default async function SubjectPage({
   params,
 }: SubjectPageProps) {
-  const { subjectId } = await params;
-
-  // Dummy Data (Later this will come from Firebase)
-  const subject = {
-    id: subjectId,
-    name:
-      subjectId.charAt(0).toUpperCase() +
-      subjectId.slice(1),
-    totalChapters: 22,
-    totalQuestions: 450,
-    progress: 42,
-  };
+  const { slug } = await params;
 
   return (
     <DashboardLayout>
       <div className="space-y-8">
-
         <SubjectHeader
-          subjectName={subject.name}
-          totalChapters={subject.totalChapters}
-          totalQuestions={subject.totalQuestions}
-          progress={subject.progress}
+          subjectName={slug}
+          totalChapters={0}
+          totalQuestions={0}
+          progress={0}
         />
 
         <ContinueLearningBanner
-          chapterTitle="Chapter 5 • Quadratic Equation"
-          progress={65}
-          estimatedTime="12 min"
+          chapterTitle="Continue your learning"
+          progress={0}
+          estimatedTime="0 min"
         />
 
         <section>
-
           <div className="mb-6">
-
             <h2 className="text-3xl font-bold text-slate-900">
               All Chapters
             </h2>
@@ -53,13 +39,11 @@ export default async function SubjectPage({
             <p className="mt-2 text-slate-500">
               Select any chapter to start or continue practicing.
             </p>
-
           </div>
 
-          <ChapterGrid />
-
+          {/* এটা পরে Subject ID দিয়ে Connect করব */}
+          <ChapterGrid subjectId={`class6_${slug}`} />
         </section>
-
       </div>
     </DashboardLayout>
   );

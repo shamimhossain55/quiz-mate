@@ -6,16 +6,16 @@ export default function QuoteBox() {
 
       <div className="flex items-center gap-2">
 
-        <Flame className="text-orange-300" size={20} />
+        <Flame className="text-orange-300" width={20} height={20} />
 
         <span className="text-sm font-semibold uppercase tracking-wider text-orange-200">
-          Today's Motivation
+          Today&apos;s Motivation
         </span>
 
       </div>
 
       <h3 className="mt-4 text-xl font-bold leading-8 text-white">
-        "আজকের পরিশ্রমই আগামী দিনের সাফল্য তৈরি করে।"
+        &ldquo;আজকের পরিশ্রমই আগামী দিনের সাফল্য তৈরি করে।&rdquo;
       </h3>
 
       <p className="mt-3 text-white/70">
@@ -25,10 +25,10 @@ export default function QuoteBox() {
 
       <div className="mt-6 flex items-center gap-2 text-sm text-white/80">
 
-        <Flame size={18} className="text-orange-300" />
+        <Flame width={18} height={18} className="text-orange-300" />
 
         <span>
-          You're on a <strong>7 Day Streak</strong>. Keep it going! 🚀
+          You&apos;re on a <strong>7 Day Streak</strong>. Keep it going! 🚀
         </span>
 
       </div>

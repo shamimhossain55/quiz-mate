@@ -26,7 +26,7 @@ export default function StatItem({
         </div>
 
         <div className="rounded-2xl bg-white/10 p-3">
-          <Icon className={iconColor} size={24} />
+          <Icon className={iconColor} width={24} height={24} />
         </div>
       </div>
     </Card>
