@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Flame,
   Target,
@@ -21,6 +22,9 @@ import {
   LucideIcon,
 } from "lucide-react";
 import BottomNav from "@/components/layout/BottomNav";
+import { getUserResults } from "@/lib/firestore/results";
+import { getStudentProfile } from "@/lib/firestore/student";
+import { Result } from "@/types/firestore";
 
 /**
  * Premium Progress (উন্নতি) Analytics Page
@@ -54,8 +58,8 @@ type Attempt = {
   durationMin: number;
 };
 
-// ডামি ডেটা (পরে Firestore থেকে আসবে)
-const overview = {
+// ডামি ডেটা (Firestore ব্যাকআপ)
+const defaultOverview = {
   totalQuiz: 42,
   avgScore: 78,
   bestScore: 96,
@@ -77,7 +81,7 @@ const weakTopics: WeakTopic[] = [
   { id: "w3", subject: "গণিত", topic: "ত্রিকোণমিতি", accuracy: 55 },
 ];
 
-const attempts: Attempt[] = [
+const defaultAttempts: Attempt[] = [
   { id: "a1", quizName: "বাংলা ২য় পত্র - ব্যাকরণ", subject: "বাংলা", score: 42, totalMarks: 50, date: "৫ জুলাই", durationMin: 18 },
   { id: "a2", quizName: "Grammar Set 3", subject: "English", score: 28, totalMarks: 40, date: "৩ জুলাই", durationMin: 22 },
   { id: "a3", quizName: "বীজগণিত অনুশীলন", subject: "গণিত", score: 35, totalMarks: 40, date: "১ জুলাই", durationMin: 15 },
@@ -96,7 +100,54 @@ const weeklyActivity = [
 ];
 
 export default function ProgressPage() {
+  const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<"overview" | "subjects" | "history">("overview");
+  const [userOverview, setUserOverview] = useState(defaultOverview);
+  const [attemptsList, setAttemptsList] = useState<Attempt[]>(defaultAttempts);
+
+  useEffect(() => {
+    async function loadStats() {
+      if (!session?.user?.email) return;
+      try {
+        const [results, profile] = await Promise.all([
+          getUserResults(session.user.email),
+          getStudentProfile(session.user.email),
+        ]);
+
+        if (results && results.length > 0) {
+          const totalQ = results.length;
+          const avgPct = Math.round(
+            results.reduce((acc, r) => acc + (r.percentage || Math.round((r.score / Math.max(1, r.correct + r.wrong)) * 100)), 0) / totalQ
+          );
+          const maxPct = Math.max(
+            ...results.map((r) => r.percentage || Math.round((r.score / Math.max(1, r.correct + r.wrong)) * 100))
+          );
+
+          setUserOverview({
+            totalQuiz: totalQ,
+            avgScore: avgPct,
+            bestScore: maxPct,
+            streak: profile?.streak || 6,
+          });
+
+          const mappedAttempts: Attempt[] = results.map((r) => ({
+            id: r.id,
+            quizName: `অধ্যায় কুইজ (${r.chapterId || "অনুশীলনী"})`,
+            subject: r.chapterId?.includes("bangla") ? "বাংলা" : r.chapterId?.includes("math") ? "গণিত" : "বিজ্ঞান",
+            score: r.score,
+            totalMarks: r.correct + r.wrong || 10,
+            date: r.createdAt ? new Date(r.createdAt).toLocaleDateString("bn-BD") : "আজ",
+            durationMin: r.timeTaken || 10,
+          }));
+
+          setAttemptsList(mappedAttempts);
+        }
+      } catch (err) {
+        console.error("Error loading progress stats:", err);
+      }
+    }
+    loadStats();
+  }, [session]);
 
   return (
     <div className="h-screen bg-slate-50 font-sans flex flex-col relative overflow-hidden selection:bg-teal-500 selection:text-white">
@@ -168,11 +219,11 @@ export default function ProgressPage() {
             <>
               {/* সার্কুলার প্রোগ্রেস রিং */}
               <div className="flex items-center justify-center gap-6 py-2">
-                <CircularProgress value={overview.avgScore} label="গড় স্কোর" color="#0D9488" size={100} />
+                <CircularProgress value={userOverview.avgScore} label="গড় স্কোর" color="#0D9488" size={100} />
                 <div className="flex flex-col gap-2.5">
-                  <MiniStat icon={ListChecks} label="মোট কুইজ" value={`${overview.totalQuiz}টি`} color="text-teal-800" bg="bg-teal-50" />
-                  <MiniStat icon={Award} label="বেস্ট স্কোর" value={`${overview.bestScore}%`} color="text-amber-800" bg="bg-amber-50" />
-                  <MiniStat icon={Flame} label="স্ট্রিক" value={`${overview.streak} দিন`} color="text-orange-800" bg="bg-orange-50" />
+                  <MiniStat icon={ListChecks} label="মোট কুইজ" value={`${userOverview.totalQuiz}টি`} color="text-teal-800" bg="bg-teal-50" />
+                  <MiniStat icon={Award} label="বেস্ট স্কোর" value={`${userOverview.bestScore}%`} color="text-amber-800" bg="bg-amber-50" />
+                  <MiniStat icon={Flame} label="স্ট্রিক" value={`${userOverview.streak} দিন`} color="text-orange-800" bg="bg-orange-50" />
                 </div>
               </div>
 
@@ -254,7 +305,7 @@ export default function ProgressPage() {
             <>
               {/* সাম্প্রতিক অ্যাটেম্পট হিস্ট্রি */}
               <div className="flex flex-col gap-2.5">
-                {attempts.map((a) => (
+                {attemptsList.map((a: Attempt) => (
                   <AttemptRow key={a.id} attempt={a} />
                 ))}
               </div>

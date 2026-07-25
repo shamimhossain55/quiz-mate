@@ -42,6 +42,8 @@ import {
   deleteStudent,
   getAllSubjects,
   addSubject,
+  updateSubject,
+  deleteSubject,
   getAllQuizzes,
   addQuiz,
   deleteQuizDoc,
@@ -145,6 +147,8 @@ export default function AdminPage() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<AdminQuestion | null>(null);
+  const [editingSubject, setEditingSubject] = useState<AdminSubject | null>(null);
+  const [selectedSubjectClassFilter, setSelectedSubjectClassFilter] = useState<string>("all");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form Cascading Select States for Quiz Creation
@@ -302,6 +306,34 @@ export default function AdminPage() {
       showToast("Firebase-এ নতুন বিষয় যুক্ত হয়েছে! 📚");
     } catch (err) {
       showToast("ত্রুটি: বিষয় যুক্ত করা যায়নি");
+    }
+  };
+
+  const handleUpdateSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSubject || !editingSubject.name) return;
+    try {
+      await updateSubject(editingSubject.id, {
+        name: editingSubject.name,
+        classId: editingSubject.classId,
+        slug: editingSubject.slug,
+        color: editingSubject.color,
+      });
+      setSubjects(subjects.map((s) => (s.id === editingSubject.id ? editingSubject : s)));
+      setEditingSubject(null);
+      showToast("বিষয় সফলভাবে আপডেট ও নতুন ক্লাসে সেট হয়েছে! ✏️");
+    } catch (err) {
+      showToast("ত্রুটি: বিষয় আপডেট করা যায়নি");
+    }
+  };
+
+  const handleDeleteSubject = async (id: string) => {
+    try {
+      await deleteSubject(id);
+      setSubjects(subjects.filter((s) => s.id !== id));
+      showToast("বিষয় মুছে ফেলা হয়েছে! 🗑️");
+    } catch (err) {
+      showToast("ত্রুটি: বিষয় ডিলিট করা যায়নি");
     }
   };
 
@@ -686,29 +718,85 @@ export default function AdminPage() {
               {/* SUBJECTS TAB */}
               {activeNav === "subjects" && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h2 className="text-base font-extrabold text-white">বিষয়সমূহ ম্যানেজমেন্ট</h2>
-                      <p className="text-[10px] text-slate-500">Firebase `subjects` কালেকশন</p>
+                      <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+                        <BookOpen width={18} height={18} className="text-indigo-400" />
+                        বিষয়সমূহ ম্যানেজমেন্ট ({subjects.length}টি বিষয়)
+                      </h2>
+                      <p className="text-[10px] text-slate-500">Firebase `subjects` কালেকশন (ক্লাস ফিল্টার ও এডিটর সহ)</p>
                     </div>
-                    <button onClick={() => setIsAddSubjectOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow">
-                      <Plus width={13} height={13} /> নতুন বিষয় যোগ করুন
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      {/* CLASS FILTER DROPDOWN */}
+                      <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1">
+                        <span className="text-[11px] font-bold text-slate-400">ফিল্টার:</span>
+                        <select
+                          value={selectedSubjectClassFilter}
+                          onChange={(e) => setSelectedSubjectClassFilter(e.target.value)}
+                          className="bg-transparent text-xs font-bold text-teal-400 focus:outline-none cursor-pointer"
+                        >
+                          <option value="all" className="bg-slate-900 text-white">সকল ক্লাস ({subjects.length})</option>
+                          {classes.map((c) => {
+                            const count = subjects.filter((s) => s.classId === c.id).length;
+                            return (
+                              <option key={c.id} value={c.id} className="bg-slate-900 text-white">
+                                {c.name} ({count})
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => setIsAddSubjectOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                      >
+                        <Plus width={13} height={13} /> নতুন বিষয় যোগ করুন
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {subjects.map((sub) => (
-                      <div key={sub.id} className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 flex flex-col justify-between space-y-3 relative overflow-hidden">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">{sub.classId}</span>
-                          <div className="h-3 w-3 rounded-full" style={{ background: sub.color || "#0D9488" }} />
+                    {(selectedSubjectClassFilter === "all"
+                      ? subjects
+                      : subjects.filter((s) => s.classId === selectedSubjectClassFilter)
+                    ).map((sub) => {
+                      const classNameStr = classes.find((c) => c.id === sub.classId)?.name || sub.classId;
+                      return (
+                        <div
+                          key={sub.id}
+                          className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-slate-700 transition-all"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800 text-teal-300 border border-teal-500/20">
+                              {classNameStr}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-3 w-3 rounded-full shadow" style={{ background: sub.color || "#0D9488" }} />
+                              <button
+                                onClick={() => setEditingSubject(sub)}
+                                title="এডিট করুন"
+                                className="h-6 w-6 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center hover:bg-amber-500/20 transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <Edit3 width={11} height={11} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSubject(sub.id)}
+                                title="ডিলিট করুন"
+                                className="h-6 w-6 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center hover:bg-rose-500/20 transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <Trash2 width={11} height={11} />
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-black text-white">{sub.name}</h3>
+                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {sub.id} · Slug: /{sub.slug}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-lg font-black text-white">{sub.name}</h3>
-                          <p className="text-[10px] text-slate-500">Slug: /{sub.slug}</p>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1020,7 +1108,7 @@ export default function AdminPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                 <BookOpen width={16} height={16} className="text-indigo-400" />
-                নতুন বিষয় যুক্ত করুন (Firebase Live)
+                নতুন বিষয় যুক্ত করুন (Class Selection সহ)
               </h3>
               <button onClick={() => setIsAddSubjectOpen(false)} className="text-slate-400 hover:text-white">
                 <X width={16} height={16} />
@@ -1028,19 +1116,133 @@ export default function AdminPage() {
             </div>
             <form onSubmit={handleAddSubject} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 font-bold mb-1">বিষয়ের নাম</label>
+                <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class) নির্বাচন করুন</label>
+                <select
+                  value={newSubject.classId}
+                  onChange={(e) => setNewSubject({ ...newSubject, classId: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-bold"
+                >
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">২. বিষয়ের নাম (Subject Name)</label>
                 <input
                   type="text"
                   required
-                  placeholder="যেমন: হিসাববিজ্ঞান"
+                  placeholder="যেমন: হিসাববিজ্ঞান / পদার্থবিজ্ঞান"
                   value={newSubject.name}
                   onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Slug (অপশনাল)</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: physics"
+                    value={newSubject.slug}
+                    onChange={(e) => setNewSubject({ ...newSubject, slug: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">কালার থিম</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={newSubject.color}
+                      onChange={(e) => setNewSubject({ ...newSubject, color: e.target.value })}
+                      className="h-8 w-12 bg-slate-800 border border-slate-700 rounded-lg cursor-pointer p-0.5"
+                    />
+                    <span className="text-[10px] text-slate-400 font-mono">{newSubject.color}</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setIsAddSubjectOpen(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
                 <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold shadow-lg">Firebase-এ সেভ করুন</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT SUBJECT MODAL */}
+      {editingSubject && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <Edit3 width={16} height={16} className="text-amber-400" />
+                বিষয় এডিট ও ক্লাস সেটিং ({editingSubject.name})
+              </h3>
+              <button onClick={() => setEditingSubject(null)} className="text-slate-400 hover:text-white">
+                <X width={16} height={16} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateSubject} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class) পরিবর্তন করুন</label>
+                <select
+                  value={editingSubject.classId}
+                  onChange={(e) => setEditingSubject({ ...editingSubject, classId: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-bold"
+                >
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">২. বিষয়ের নাম (Subject Name)</label>
+                <input
+                  type="text"
+                  required
+                  value={editingSubject.name}
+                  onChange={(e) => setEditingSubject({ ...editingSubject, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">Slug</label>
+                  <input
+                    type="text"
+                    value={editingSubject.slug}
+                    onChange={(e) => setEditingSubject({ ...editingSubject, slug: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">কালার থিম</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={editingSubject.color || "#0D9488"}
+                      onChange={(e) => setEditingSubject({ ...editingSubject, color: e.target.value })}
+                      className="h-8 w-12 bg-slate-800 border border-slate-700 rounded-lg cursor-pointer p-0.5"
+                    />
+                    <span className="text-[10px] text-slate-400 font-mono">{editingSubject.color || "#0D9488"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setEditingSubject(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold shadow-lg">পরিবর্তন সেভ করুন</button>
               </div>
             </form>
           </div>

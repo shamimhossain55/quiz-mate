@@ -46,17 +46,26 @@ export interface Result {
   id: string;
   userId: string;
   quizId: string;
+  chapterId?: string;
   score: number;
   correct: number;
   wrong: number;
   skipped: number;
-  submittedAt: Date;
+  percentage?: number;
+  negativeMarking?: boolean;
+  timeTaken?: number;
+  createdAt?: any;
 }
 
 export interface Student {
   id: string;
-  uid: string;
+  uid?: string;
   name: string;
   email: string;
-  classId: string;
+  classId?: string;
+  point: number;
+  totalExam: number;
+  streak?: number;
+  level?: number;
+  avatarUrl?: string | null;
 }

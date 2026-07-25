@@ -8,11 +8,13 @@
   "start": "next start",
   "lint": "eslint",
 
-  "seed:subjects": "tsx scripts/seed-subjects.ts",
-  "seed:chapters": "tsx scripts/seed-chapters.ts",
-  "seed:questions": "tsx scripts/seed-questions.ts",
-  "seed:quizzes": "tsx scripts/seed-quizzes.ts"
-},
+    "seed:classes": "tsx scripts/seed-classes.ts",
+    "seed:subjects": "tsx scripts/seed-subjects.ts",
+    "seed:chapters": "tsx scripts/seed-chapters.ts",
+    "seed:questions": "tsx scripts/seed-questions.ts",
+    "seed:quizzes": "tsx scripts/seed-quizzes.ts",
+    "seed:all": "tsx scripts/seed-all.ts"
+  },
 
 
   "dependencies": {

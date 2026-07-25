@@ -1,77 +1,51 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-
-import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
-
-import {
-  BookOpen,
-  PlayCircle,
-  User,
-} from "lucide-react";
-
+import { Play, BookOpen, User, HelpCircle, ChevronRight } from "lucide-react";
 import { Chapter } from "@/types/firestore";
 
 interface ChapterCardProps {
   chapter: Chapter;
 }
 
-export default function ChapterCard({
-  chapter,
-}: ChapterCardProps) {
+export default function ChapterCard({ chapter }: ChapterCardProps) {
   const router = useRouter();
 
   return (
-    <Card
-      className="
-        p-6
-        transition-all
-        duration-300
-        hover:-translate-y-1
-        hover:border-blue-300
-        hover:shadow-xl
-      "
+    <div
+      onClick={() => router.push(`/quiz/setup?chapter=${chapter.id}`)}
+      className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-200 cursor-pointer group active:scale-[0.99] flex items-center justify-between gap-3"
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <span className="text-sm font-medium text-blue-600">
-            Chapter {chapter.order}
-          </span>
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        {/* Chapter Order Badge */}
+        <div className="h-10 w-10 rounded-2xl bg-teal-50 text-teal-700 font-black text-xs flex items-center justify-center border border-teal-100/80 flex-shrink-0 group-hover:bg-teal-600 group-hover:text-white transition-all">
+          {chapter.order || 1}
+        </div>
 
-          <h3 className="mt-2 text-2xl font-bold text-slate-900">
+        <div className="min-w-0 flex-1">
+          <p className="text-[9px] font-extrabold text-teal-600 uppercase tracking-wide">
+            অধ্যায় {chapter.order || 1}
+          </p>
+          <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug truncate group-hover:text-teal-700 transition-colors">
             {chapter.name}
           </h3>
-
           {chapter.author && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
-              <User width={16} height={16} />
-              <span>{chapter.author}</span>
-            </div>
+            <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+              <User width={10} height={10} />
+              {chapter.author}
+            </p>
           )}
         </div>
-
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100">
-          <BookOpen
-            width={24} height={24}
-            className="text-blue-600"
-          />
-        </div>
       </div>
 
-      <div className="mt-8">
-        <Button
-          className="w-full"
-          onClick={() =>
-            router.push(
-              `/quiz/setup?chapter=${chapter.id}`
-            )
-          }
-        >
-          <PlayCircle width={18} height={18} />
-          Start Practice
-        </Button>
-      </div>
-    </Card>
+      {/* Start Button */}
+      <button
+        type="button"
+        className="h-9 px-3 rounded-xl bg-slate-100 group-hover:bg-gradient-to-r group-hover:from-teal-500 group-hover:to-emerald-600 text-slate-600 group-hover:text-white font-extrabold text-[11px] flex items-center gap-1 flex-shrink-0 transition-all shadow-2xs"
+      >
+        <Play width={12} height={12} className="fill-current" />
+        <span>শুরু করো</span>
+      </button>
+    </div>
   );
 }

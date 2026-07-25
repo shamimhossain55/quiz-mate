@@ -1,70 +1,78 @@
 "use client";
 
 import Link from "next/link";
-import Logo from "@/components/ui/Logo";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { Zap, LogIn, ArrowRight } from "lucide-react";
 
 export default function Navbar() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/80 backdrop-blur-lg">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+  const router = useRouter();
+  const { data: session } = useSession();
 
-        {/* Logo */}
-        <Link href="/" className="flex items-center">
-          <Logo size="sm" />
+  return (
+    <header className="sticky top-0 z-50 border-b border-slate-200/60 bg-white/85 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
+
+        {/* Brand Logo */}
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="h-9 w-9 rounded-2xl bg-gradient-to-tr from-teal-500 via-emerald-400 to-indigo-600 p-[2px] shadow-md group-hover:scale-105 transition-transform">
+            <div className="h-full w-full rounded-[14px] bg-slate-900 flex items-center justify-center">
+              <Zap width={18} height={18} className="text-teal-300 fill-teal-300" />
+            </div>
+          </div>
+          <div>
+            <span className="text-base font-black tracking-tight text-slate-900 block leading-none">
+              QuizMate
+            </span>
+            <span className="text-[9px] font-bold text-teal-700 leading-none block mt-0.5">
+              Learn & Battle
+            </span>
+          </div>
         </Link>
 
-        {/* Desktop Menu */}
-        <nav className="hidden items-center gap-8 md:flex">
-          <Link
-            href="/"
-            className="text-sm font-medium text-slate-600 transition hover:text-blue-600"
-          >
-            Home
-          </Link>
-
-          <Link
-            href="#subjects"
-            className="text-sm font-medium text-slate-600 transition hover:text-blue-600"
-          >
-            Subjects
-          </Link>
-
-          <Link
-            href="#features"
-            className="text-sm font-medium text-slate-600 transition hover:text-blue-600"
-          >
-            Features
-          </Link>
-
-          <Link
-            href="#community"
-            className="text-sm font-medium text-slate-600 transition hover:text-blue-600"
-          >
-            Community
-          </Link>
+        {/* Navigation Links */}
+        <nav className="hidden md:flex items-center gap-6">
+          <a href="#features" className="text-xs font-extrabold text-slate-600 hover:text-teal-700 transition-colors">
+            ফিচারসমূহ
+          </a>
+          <a href="#subjects" className="text-xs font-extrabold text-slate-600 hover:text-teal-700 transition-colors">
+            বিষয়সমূহ
+          </a>
+          <a href="#stats" className="text-xs font-extrabold text-slate-600 hover:text-teal-700 transition-colors">
+            পরিসংখ্যান
+          </a>
         </nav>
 
-        {/* Right Side */}
-        <div className="hidden items-center gap-3 md:flex">
-          <Link
-            href="/login"
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-          >
-            Login
-          </Link>
-
-          <Link
-            href="/login"
-            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            শুরু করুন
-          </Link>
+        {/* Auth Buttons */}
+        <div className="flex items-center gap-2">
+          {session ? (
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="h-10 px-4 rounded-2xl bg-gradient-to-r from-teal-600 to-indigo-600 text-white text-xs font-extrabold shadow-md active:scale-95 hover:shadow-lg transition-all flex items-center gap-1.5"
+            >
+              <span>ড্যাশবোর্ড</span>
+              <ArrowRight width={14} height={14} />
+            </button>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="h-10 px-3.5 rounded-2xl bg-slate-100 text-slate-700 text-xs font-extrabold hover:bg-slate-200 active:scale-95 transition-all flex items-center gap-1.5"
+              >
+                <LogIn width={14} height={14} />
+                <span>লগইন</span>
+              </Link>
+              <Link
+                href="/login"
+                className="h-10 px-4 rounded-2xl bg-gradient-to-r from-teal-600 to-indigo-600 text-white text-xs font-extrabold shadow-md active:scale-95 hover:shadow-lg transition-all flex items-center gap-1.5"
+              >
+                <span>শুরু করি</span>
+                <ArrowRight width={14} height={14} />
+              </Link>
+            </>
+          )}
         </div>
 
-        {/* Mobile Menu Button */}
-        <button className="md:hidden rounded-lg p-2 hover:bg-slate-100">
-          ☰
-        </button>
       </div>
     </header>
   );

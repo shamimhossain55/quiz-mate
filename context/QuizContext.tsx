@@ -6,6 +6,7 @@ import {
   useState,
   ReactNode,
 } from "react";
+import { Question } from "@/types/firestore";
 
 interface QuizContextType {
   currentQuestion: number;
@@ -16,6 +17,13 @@ interface QuizContextType {
   answers: Record<string, number>;
   setAnswers: React.Dispatch<
     React.SetStateAction<Record<string, number>>
+  >;
+
+  // Quiz-এ যে প্রশ্নগুলো ছিল সেগুলো store করো
+  // যাতে review page-এ আর Firestore থেকে re-fetch না করতে হয়
+  playedQuestions: Question[];
+  setPlayedQuestions: React.Dispatch<
+    React.SetStateAction<Question[]>
   >;
 
   resetQuiz: () => void;
@@ -39,9 +47,14 @@ export function QuizProvider({
     Record<string, number>
   >({});
 
+  const [playedQuestions, setPlayedQuestions] = useState<
+    Question[]
+  >([]);
+
   function resetQuiz() {
     setCurrentQuestion(1);
     setAnswers({});
+    setPlayedQuestions([]);
   }
 
   return (
@@ -51,6 +64,8 @@ export function QuizProvider({
         setCurrentQuestion,
         answers,
         setAnswers,
+        playedQuestions,
+        setPlayedQuestions,
         resetQuiz,
       }}
     >

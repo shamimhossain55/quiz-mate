@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   Crown,
   Trophy,
@@ -16,6 +17,7 @@ import {
   Timer,
 } from "lucide-react";
 import BottomNav from "@/components/layout/BottomNav";
+import { getTopStudents } from "@/lib/firestore/student";
 
 /**
  * Ultra-Competitive & Transparent Leaderboard Page (লিডারবোর্ড)
@@ -49,7 +51,7 @@ const playersMonthly: Player[] = [
   { uid: "u1", name: "আয়েশা রহমান", point: 4650, avatarUrl: null, prevRank: 1, streak: 18, level: 15, badgeTitle: "⚡ রানার-আপ" },
   { uid: "u3", name: "নুসরাত জাহান", point: 3950, avatarUrl: null, prevRank: 3, streak: 14, level: 13, badgeTitle: "🔥 ৩য় স্থান" },
   { uid: "u4", name: "রাকিব হাসান", point: 3450, avatarUrl: null, prevRank: 4, streak: 10, level: 11 },
-  { uid: "u5", name: "শামীম হোসেন", point: 3210, avatarUrl: null, prevRank: 8, streak: 7, level: 12 }, // Logged in user
+  { uid: "u5", name: "শামীম হোসেন", point: 3210, avatarUrl: null, prevRank: 8, streak: 7, level: 12 },
   { uid: "u6", name: "মিম আক্তার", point: 3100, avatarUrl: null, prevRank: 5, streak: 8, level: 10 },
 ];
 
@@ -61,18 +63,42 @@ const playersAllTime: Player[] = [
   { uid: "u4", name: "রাকিব হাসান", point: 10800, avatarUrl: null, prevRank: 4, streak: 12, level: 16 },
 ];
 
-const currentUserUid = "u5"; // শামীম হোসেন
-
 export default function LeaderboardPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [timeframe, setTimeframe] = useState<"weekly" | "monthly" | "allTime">("weekly");
+  const [firestorePlayers, setFirestorePlayers] = useState<Player[]>([]);
 
-  const currentPlayersList =
+  useEffect(() => {
+    async function fetchLeaderboard() {
+      const students = await getTopStudents(20);
+      if (students && students.length > 0) {
+        const mapped: Player[] = students.map((st, idx) => ({
+          uid: st.email || st.id,
+          name: st.name,
+          point: st.point,
+          avatarUrl: st.avatarUrl || null,
+          prevRank: idx + 1,
+          streak: st.streak || 1,
+          level: st.level || Math.floor(st.point / 100) + 1,
+          badgeTitle: idx === 0 ? "🏆 চ্যাম্পিয়ন" : idx === 1 ? "⚡ রানার-আপ" : idx === 2 ? "🔥 ৩য় স্থান" : undefined,
+        }));
+        setFirestorePlayers(mapped);
+      }
+    }
+    fetchLeaderboard();
+  }, []);
+
+  const defaultList =
     timeframe === "monthly"
       ? playersMonthly
       : timeframe === "allTime"
       ? playersAllTime
       : playersWeekly;
+
+  const currentPlayersList = firestorePlayers.length >= 3 ? firestorePlayers : defaultList;
+
+  const currentUserUid = session?.user?.email || "u5";
 
   const top3 = currentPlayersList.slice(0, 3);
   const rest = currentPlayersList.slice(3);

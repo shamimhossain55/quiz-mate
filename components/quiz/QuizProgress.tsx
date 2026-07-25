@@ -1,4 +1,4 @@
-import Card from "@/components/ui/Card";
+"use client";
 
 interface QuizProgressProps {
   currentQuestion: number;
@@ -9,26 +9,26 @@ export default function QuizProgress({
   currentQuestion,
   totalQuestions,
 }: QuizProgressProps) {
-  const progress = (currentQuestion / totalQuestions) * 100;
+  const percentage = totalQuestions > 0 ? Math.round((currentQuestion / totalQuestions) * 100) : 0;
 
   return (
-    <Card className="p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="font-medium text-slate-700">
-          Progress
+    <div className="px-5 py-2">
+      <div className="flex items-center justify-between text-[11px] font-extrabold mb-1.5">
+        <span className="text-slate-600 uppercase tracking-wider">
+          প্রশ্ন <span className="text-teal-700 font-black">{currentQuestion}</span> / {totalQuestions}
         </span>
-
-        <span className="text-sm font-semibold text-slate-600">
-          {currentQuestion} / {totalQuestions}
+        <span className="text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 font-black">
+          {percentage}% সম্পন্ন
         </span>
       </div>
 
-      <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+      {/* Progress Bar Container */}
+      <div className="h-2.5 w-full rounded-full bg-slate-200/80 overflow-hidden p-0.5 border border-slate-300/40">
         <div
-          className="h-full rounded-full bg-blue-600 transition-all duration-300"
-          style={{ width: `${progress}%` }}
+          className="h-full rounded-full bg-gradient-to-r from-teal-500 via-emerald-400 to-indigo-600 shadow-[0_0_10px_rgba(13,148,136,0.6)] transition-all duration-500 ease-out"
+          style={{ width: `${percentage}%` }}
         />
       </div>
-    </Card>
+    </div>
   );
 }

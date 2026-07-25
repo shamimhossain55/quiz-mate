@@ -202,6 +202,16 @@ export async function addSubject(subject: AdminSubject): Promise<void> {
   });
 }
 
+export async function updateSubject(id: string, subject: Partial<AdminSubject>): Promise<void> {
+  const subRef = doc(db, "subjects", id);
+  await updateDoc(subRef, subject);
+}
+
+export async function deleteSubject(id: string): Promise<void> {
+  await deleteDoc(doc(db, "subjects", id));
+}
+
+
 // ===== QUIZ OPERATIONS =====
 export async function getAllQuizzes(): Promise<AdminQuiz[]> {
   try {

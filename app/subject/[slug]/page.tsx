@@ -1,4 +1,9 @@
-import DashboardLayout from "@/components/dashboard/layout/DashboardLayout";
+"use client";
+
+import { use } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, BookOpen, Sparkles } from "lucide-react";
+import BottomNav from "@/components/layout/BottomNav";
 import SubjectHeader from "@/components/subject/SubjectHeader";
 import ContinueLearningBanner from "@/components/subject/ContinueLearningBanner";
 import ChapterGrid from "@/components/subject/ChapterGrid";
@@ -9,42 +14,66 @@ interface SubjectPageProps {
   }>;
 }
 
-export default async function SubjectPage({
-  params,
-}: SubjectPageProps) {
-  const { slug } = await params;
+export default function SubjectPage({ params }: SubjectPageProps) {
+  const { slug } = use(params);
+  const router = useRouter();
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <SubjectHeader
-          subjectName={slug}
-          totalChapters={0}
-          totalQuestions={0}
-          progress={0}
-        />
+    <div className="h-screen font-sans flex flex-col relative overflow-hidden bg-slate-50 selection:bg-teal-500 selection:text-white">
+      {/* AMBIENT GLOW BACKGROUND */}
+      <div className="absolute -top-24 -left-20 w-80 h-80 rounded-full bg-teal-400/15 blur-3xl pointer-events-none animate-ambient-float" />
+      <div className="absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none animate-ambient-float" style={{ animationDelay: "-4s" }} />
+      <div className="absolute -bottom-20 left-10 w-72 h-72 rounded-full bg-rose-400/10 blur-3xl pointer-events-none animate-ambient-float" style={{ animationDelay: "-2s" }} />
 
-        <ContinueLearningBanner
-          chapterTitle="Continue your learning"
-          progress={0}
-          estimatedTime="0 min"
-        />
+      <div className="mx-auto w-full max-w-sm flex flex-col flex-1 min-h-0 relative z-10">
 
-        <section>
-          <div className="mb-6">
-            <h2 className="text-3xl font-bold text-slate-900">
-              All Chapters
-            </h2>
+        {/* TOP BAR */}
+        <div className="flex-shrink-0 px-5 pt-5 pb-2">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="h-10 w-10 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center text-slate-600 hover:text-slate-900 active:scale-95 transition-all"
+            >
+              <ArrowLeft width={18} height={18} />
+            </button>
 
-            <p className="mt-2 text-slate-500">
-              Select any chapter to start or continue practicing.
-            </p>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200/80 rounded-2xl px-3 py-1.5 shadow-2xs">
+              <BookOpen width={14} height={14} className="text-teal-600" />
+              <span className="text-xs font-black text-slate-900 capitalize">{slug}</span>
+            </div>
+
+            <div className="h-10 w-10" />
+          </div>
+        </div>
+
+        {/* SCROLLABLE CONTENT */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar">
+
+          {/* Subject Header Banner */}
+          <SubjectHeader subjectName={slug} />
+
+          {/* Continue Learning Banner */}
+          <ContinueLearningBanner chapterTitle={`অধ্যায় ১: ${slug} পরিচিতি`} progress={65} />
+
+          {/* Chapters Section */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Sparkles width={13} height={13} className="text-amber-500" />
+                <h2 className="text-[11px] font-extrabold text-slate-700 uppercase tracking-widest">
+                  সকল অধ্যায়সমূহ
+                </h2>
+              </div>
+            </div>
+
+            <ChapterGrid subjectId={`class6_${slug}`} />
           </div>
 
-          {/* এটা পরে Subject ID দিয়ে Connect করব */}
-          <ChapterGrid subjectId={`class6_${slug}`} />
-        </section>
+        </div>
+
+        {/* BOTTOM NAV */}
+        <BottomNav activeTab="home" />
       </div>
-    </DashboardLayout>
+    </div>
   );
 }

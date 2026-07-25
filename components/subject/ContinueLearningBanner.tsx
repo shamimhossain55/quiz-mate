@@ -1,84 +1,54 @@
-import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
-import { ArrowRight, BookOpen, Clock } from "lucide-react";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { BookOpen, ChevronRight, Play } from "lucide-react";
 
 interface ContinueLearningBannerProps {
-  chapterTitle: string;
-  progress: number;
-  estimatedTime: string;
-  onContinue?: () => void;
+  chapterTitle?: string;
+  progress?: number;
+  estimatedTime?: string;
+  chapterId?: string;
 }
 
 export default function ContinueLearningBanner({
-  chapterTitle,
-  progress,
-  estimatedTime,
-  onContinue,
+  chapterTitle = "অধ্যায় ১: মৌলিক ধারণা",
+  progress = 45,
+  estimatedTime = "১৫ মি",
+  chapterId = "ch1",
 }: ContinueLearningBannerProps) {
+  const router = useRouter();
+
   return (
-    <Card className="overflow-hidden bg-gradient-to-r from-emerald-500 to-teal-600 p-8 text-white">
-
-      <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
-
-        <div>
-
-          <div className="mb-3 inline-flex items-center rounded-full bg-white/20 px-4 py-1 text-sm font-medium">
-            🔥 Continue Learning
-          </div>
-
-          <h2 className="text-3xl font-bold">
-            {chapterTitle}
-          </h2>
-
-          <p className="mt-2 text-emerald-100">
-            Continue from where you left off.
-          </p>
-
-          <div className="mt-6 flex flex-wrap gap-6 text-sm">
-
-            <div className="flex items-center gap-2">
-              <BookOpen width={18} height={18} />
-              <span>{progress}% Completed</span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Clock width={18} height={18} />
-              <span>{estimatedTime} remaining</span>
-            </div>
-
-          </div>
-
-        </div>
-
-        <div className="w-full max-w-sm">
-
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span>Progress</span>
-            <span>{progress}%</span>
-          </div>
-
-          <div className="mb-6 h-3 overflow-hidden rounded-full bg-white/20">
-
-            <div
-              className="h-full rounded-full bg-white transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-
-          </div>
-
-          <Button
-            onClick={onContinue}
-            className="w-full bg-white text-emerald-600 hover:bg-slate-100"
-          >
-            Continue Learning
-
-            <ArrowRight width={18} height={18} />
-          </Button>
-
-        </div>
-
+    <div
+      onClick={() => router.push(`/quiz/setup?chapter=${chapterId}`)}
+      className="rounded-2xl p-3.5 flex items-center gap-3 bg-white border border-slate-200/80 shadow-2xs hover:shadow-md transition-all active:scale-[0.99] cursor-pointer group"
+    >
+      <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center flex-shrink-0 shadow-md">
+        <Play width={18} height={18} className="text-white fill-white ml-0.5" />
       </div>
 
-    </Card>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-0.5">
+          <span className="text-[8px] font-extrabold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded-full border border-indigo-100 uppercase tracking-wide">
+            পড়া চালিয়ে যান
+          </span>
+        </div>
+        <p className="text-xs font-black text-slate-900 leading-tight truncate">
+          {chapterTitle}
+        </p>
+        <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 shadow-2xs transition-all"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      <ChevronRight
+        width={18}
+        height={18}
+        className="text-slate-300 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all flex-shrink-0"
+      />
+    </div>
   );
 }

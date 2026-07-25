@@ -22,8 +22,11 @@ import {
   Crown,
   LucideIcon,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import BottomNav from "@/components/layout/BottomNav";
 import { getSubjects } from "@/lib/firestore/subjects";
+import { getStudentProfile } from "@/lib/firestore/student";
+import { Student } from "@/types/firestore";
 
 type SubjectItem = {
   id: string;
@@ -37,17 +40,19 @@ type SubjectItem = {
 };
 
 const defaultSubjects: SubjectItem[] = [
-  { id: "bangla", name: "বাংলা", slug: "bangla", icon: BookOpen, color: "#0D9488", gradient: "linear-gradient(145deg, #0D9488 0%, #047857 100%)", progress: 85, chaptersCount: 12 },
+  { id: "bangla", name: "বাংলা", slug: "bangla", icon: BookOpen, color: "#0D9488", gradient: "linear-gradient(145deg, #0D9488 0%, #047857 100%)", progress: 85, chaptersCount: 18 },
   { id: "english", name: "English", slug: "english", icon: Languages, color: "#F87171", gradient: "linear-gradient(145deg, #F87171 0%, #E11D48 100%)", progress: 62, chaptersCount: 10 },
-  { id: "math", name: "গণিত", slug: "math", icon: Calculator, color: "#6366F1", gradient: "linear-gradient(145deg, #6366F1 0%, #4338CA 100%)", progress: 74, chaptersCount: 15 },
+  { id: "math", name: "গণিত", slug: "math", icon: Calculator, color: "#6366F1", gradient: "linear-gradient(145deg, #6366F1 0%, #4338CA 100%)", progress: 74, chaptersCount: 11 },
   { id: "science", name: "বিজ্ঞান", slug: "science", icon: FlaskConical, color: "#F59E0B", gradient: "linear-gradient(145deg, #F59E0B 0%, #D97706 100%)", progress: 90, chaptersCount: 14 },
-  { id: "socialScience", name: "সমাজবিজ্ঞান", slug: "social-science", icon: Globe2, color: "#14B8A6", gradient: "linear-gradient(145deg, #14B8A6 0%, #0F766E 100%)", progress: 55, chaptersCount: 8 },
+  { id: "socialScience", name: "সমাজবিজ্ঞান", slug: "bgs", icon: Globe2, color: "#14B8A6", gradient: "linear-gradient(145deg, #14B8A6 0%, #0F766E 100%)", progress: 55, chaptersCount: 8 },
   { id: "ict", name: "আইসিটি", slug: "ict", icon: BarChart3, color: "#EC4899", gradient: "linear-gradient(145deg, #EC4899 0%, #BE185D 100%)", progress: 80, chaptersCount: 9 },
 ];
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [subjectsList, setSubjectsList] = useState<SubjectItem[]>(defaultSubjects);
+  const [student, setStudent] = useState<Student | null>(null);
   const [greeting, setGreeting] = useState("শুভ দিন");
   const [greetingEmoji, setGreetingEmoji] = useState("✨");
 
@@ -58,8 +63,13 @@ export default function DashboardPage() {
     else if (hour >= 17 && hour < 20) { setGreeting("শুভ সন্ধ্যা"); setGreetingEmoji("🌇"); }
     else { setGreeting("শুভ রাত্রি"); setGreetingEmoji("🌙"); }
 
-    async function loadSubjects() {
+    async function loadData() {
       try {
+        if (session?.user?.email) {
+          const profile = await getStudentProfile(session.user.email);
+          if (profile) setStudent(profile);
+        }
+
         const firestoreSubjects = await getSubjects("class6");
         if (firestoreSubjects && firestoreSubjects.length > 0) {
           const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => ({
@@ -68,14 +78,14 @@ export default function DashboardPage() {
             color: defaultSubjects[idx % defaultSubjects.length].color,
             gradient: defaultSubjects[idx % defaultSubjects.length].gradient,
             progress: 70 + ((idx * 7) % 25),
-            chaptersCount: 10 + (idx % 5),
+            chaptersCount: s.slug === "bangla" ? 18 : s.slug === "math" ? 11 : s.slug === "science" ? 14 : 10,
           }));
           setSubjectsList(mapped);
         }
-      } catch (err) { console.error("Error loading subjects:", err); }
+      } catch (err) { console.error("Error loading dashboard data:", err); }
     }
-    loadSubjects();
-  }, []);
+    loadData();
+  }, [session]);
 
   return (
     <div className="h-screen font-sans flex flex-col relative overflow-hidden bg-slate-50 selection:bg-teal-500 selection:text-white">
