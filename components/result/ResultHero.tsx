@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, Trophy } from "lucide-react";
+import { Sparkles } from "lucide-react";
 
 interface ResultHeroProps {
   percentage: number;

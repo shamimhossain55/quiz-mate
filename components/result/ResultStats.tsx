@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, XCircle, Trophy, BookOpen, Target } from "lucide-react";
+import { CheckCircle2, XCircle, Trophy, BookOpen } from "lucide-react";
 
 interface ResultStatsProps {
   score: number;

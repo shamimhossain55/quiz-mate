@@ -1,6 +1,6 @@
 "use client";
 
-import { Trophy, Zap, Award } from "lucide-react";
+import { Trophy, Zap } from "lucide-react";
 
 interface PerformanceBadgeProps {
   percentage: number;

@@ -1,6 +1,7 @@
 "use client";
 
 import { Trophy, Star } from "lucide-react";
+import { getStarCount } from "@/components/result/StarRating";
 
 interface ScoreCircleProps {
   percentage: number;
@@ -8,6 +9,7 @@ interface ScoreCircleProps {
 
 export default function ScoreCircle({ percentage }: ScoreCircleProps) {
   const strokeDashoffset = 376 - (376 * percentage) / 100;
+  const earnedStars = getStarCount(percentage);
 
   return (
     <div className="flex flex-col items-center justify-center my-2">
@@ -44,9 +46,18 @@ export default function ScoreCircle({ percentage }: ScoreCircleProps) {
             সঠিক স্কোর
           </span>
           <div className="flex items-center gap-0.5 mt-1">
-            <Star width={10} height={10} className="text-amber-400 fill-amber-400" />
-            <Star width={10} height={10} className="text-amber-400 fill-amber-400" />
-            <Star width={10} height={10} className="text-amber-400 fill-amber-400" />
+            {[1, 2, 3].map((starNum) => (
+              <Star
+                key={starNum}
+                width={10}
+                height={10}
+                className={
+                  starNum <= earnedStars
+                    ? "text-amber-400 fill-amber-400"
+                    : "text-slate-600 fill-slate-700 opacity-60"
+                }
+              />
+            ))}
           </div>
         </div>
       </div>

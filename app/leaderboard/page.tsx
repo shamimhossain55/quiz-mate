@@ -6,7 +6,6 @@ import { useSession } from "next-auth/react";
 import {
   Crown,
   Trophy,
-  Sparkles,
   ArrowUp,
   ArrowDown,
   Minus,

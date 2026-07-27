@@ -40,6 +40,7 @@ export type AdminSubject = {
   totalStudents?: number;
   color?: string;
   order?: number;
+  imageUrl?: string;
 };
 
 export type AdminChapter = {
@@ -184,6 +185,7 @@ export async function getAllSubjects(): Promise<AdminSubject[]> {
       totalQuizzes: docSnap.data().totalQuizzes || 10,
       totalStudents: docSnap.data().totalStudents || 350,
       color: docSnap.data().color || "#0D9488",
+      imageUrl: docSnap.data().imageUrl || undefined,
     }));
   } catch (err) {
     console.error("Error fetching subjects:", err);
@@ -199,12 +201,19 @@ export async function addSubject(subject: AdminSubject): Promise<void> {
     classId: subject.classId,
     color: subject.color || "#0D9488",
     order: subject.order || 1,
+    imageUrl: subject.imageUrl || "",
   });
 }
 
 export async function updateSubject(id: string, subject: Partial<AdminSubject>): Promise<void> {
   const subRef = doc(db, "subjects", id);
-  await updateDoc(subRef, subject);
+  const cleanData: Record<string, any> = {};
+  if (subject.name !== undefined) cleanData.name = subject.name;
+  if (subject.slug !== undefined) cleanData.slug = subject.slug;
+  if (subject.classId !== undefined) cleanData.classId = subject.classId;
+  if (subject.color !== undefined) cleanData.color = subject.color;
+  if (subject.imageUrl !== undefined) cleanData.imageUrl = subject.imageUrl;
+  await updateDoc(subRef, cleanData);
 }
 
 export async function deleteSubject(id: string): Promise<void> {

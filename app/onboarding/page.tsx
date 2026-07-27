@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Check,
   Eye,
+  LucideIcon,
 } from "lucide-react";
 
 type ClassOption = {
@@ -34,7 +35,7 @@ type ClassDisplayConfig = {
   subTitle: string;
   badge: string;
   gradient: string;
-  icon: any;
+  icon: LucideIcon;
 };
 
 const CLASS_CONFIGS: Record<string, ClassDisplayConfig> = {
@@ -125,7 +126,9 @@ export default function OnboardingPage() {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get("preview") === "true") {
-        setIsPreview(true);
+        // setTimeout দিয়ে setState কল করা হচ্ছে যাতে
+        // useEffect-এর মধ্যে synchronous cascading render না হয়
+        setTimeout(() => setIsPreview(true), 0);
       }
     }
   }, []);

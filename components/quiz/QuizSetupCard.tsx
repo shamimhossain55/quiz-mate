@@ -7,10 +7,7 @@ import {
   Clock,
   HelpCircle,
   Zap,
-  Trophy,
   Shield,
-  Flame,
-  ChevronLeft,
   Sparkles,
   Target,
   AlertCircle,
@@ -109,7 +106,7 @@ export default function QuizSetupCard({ chapterId }: QuizSetupCardProps) {
       const session = startQuiz(chapterId, questionCount, timeLimit, negativeMarking);
       setSession(session);
       router.push("/quiz/play");
-    } catch (e) {
+    } catch {
       setIsStarting(false);
     }
   }

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Flame,
-  Target,
   Award,
   ListChecks,
   AlertTriangle,
@@ -16,15 +15,12 @@ import {
   Languages,
   TrendingUp,
   Clock,
-  ChevronRight,
-  Zap,
   Sparkles,
   LucideIcon,
 } from "lucide-react";
 import BottomNav from "@/components/layout/BottomNav";
 import { getUserResults } from "@/lib/firestore/results";
 import { getStudentProfile } from "@/lib/firestore/student";
-import { Result } from "@/types/firestore";
 
 /**
  * Premium Progress (উন্নতি) Analytics Page

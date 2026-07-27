@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { RotateCcw, BookOpen, Home, ArrowRight } from "lucide-react";
+import { RotateCcw, BookOpen, Home } from "lucide-react";
 
 export default function ResultActions() {
   const router = useRouter();

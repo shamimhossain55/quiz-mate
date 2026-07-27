@@ -14,6 +14,7 @@ export interface FirestoreSubject {
   description: string;
   group?: SubjectGroup;
   order: number;
+  imageUrl?: string;
 }
 
 export interface Chapter {

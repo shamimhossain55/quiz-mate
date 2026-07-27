@@ -7,7 +7,6 @@ import {
   BarChart3,
   Flame,
   Award,
-  Sparkles,
   Zap,
 } from "lucide-react";
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Loader2, AlertCircle, RefreshCw, X, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 
 import QuizHeader from "@/components/quiz/QuizHeader";
 import QuizProgress from "@/components/quiz/QuizProgress";
@@ -100,15 +100,25 @@ export default function QuizPlayPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (timeLeft <= 0) {
-      handleFinish();
-      return;
-    }
+
     const timer = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
+
     return () => clearInterval(timer);
-  }, [loading, timeLeft, handleFinish, setTimeLeft]);
+  }, [loading, setTimeLeft]);
+
+  useEffect(() => {
+    if (!loading && timeLeft <= 0) {
+      handleFinish();
+    }
+  }, [loading, timeLeft, handleFinish]);
 
   const current = questions[currentQuestion - 1] || {
     id: `q_${currentQuestion}`,

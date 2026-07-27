@@ -1,6 +1,7 @@
 import { use } from "react";
 import BottomNav from "@/components/layout/BottomNav";
 import ResultHero from "@/components/result/ResultHero";
+import StarRating from "@/components/result/StarRating";
 import ScoreCircle from "@/components/result/ScoreCircle";
 import ResultStats from "@/components/result/ResultStats";
 import PerformanceBadge from "@/components/result/PerformanceBadge";
@@ -39,6 +40,9 @@ export default function ResultPage({ searchParams }: ResultPageProps) {
 
           {/* Result Hero Header */}
           <ResultHero percentage={percentage} />
+
+          {/* Clash of Clans Style Animated Star Rating */}
+          <StarRating percentage={percentage} />
 
           {/* Circular Score Gauge */}
           <ScoreCircle percentage={percentage} />

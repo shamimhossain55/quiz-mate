@@ -157,7 +157,7 @@ export default function AdminPage() {
   const [selectedChapterId, setSelectedChapterId] = useState("");
 
   const [newQuiz, setNewQuiz] = useState({ name: "", questionsCount: 10, status: "published" as const });
-  const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", color: "#0D9488" });
+  const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", color: "#0D9488", imageUrl: "" });
   const [newUser, setNewUser] = useState({ name: "", email: "", class: "ক্লাস ৯" });
 
   // Bulk JSON State
@@ -212,7 +212,60 @@ export default function AdminPage() {
     loadChapters();
   }, [selectedSubjectId]);
 
-  // Handlers
+  // Helper for compressing phone storage photos into optimized Base64
+  const compressImageFile = (file: File, maxWidth = 600, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const base64 = canvas.toDataURL("image/jpeg", quality);
+            resolve(base64);
+          } else {
+            resolve(event.target?.result as string);
+          }
+        };
+        img.onerror = () => reject(new Error("Image load error"));
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      showToast("ফোন গ্যালারি থেকে ছবি প্রসেস হচ্ছে... ⏳");
+      const base64Data = await compressImageFile(file);
+      if (isEditing && editingSubject) {
+        setEditingSubject({ ...editingSubject, imageUrl: base64Data });
+      } else {
+        setNewSubject({ ...newSubject, imageUrl: base64Data });
+      }
+      showToast("গ্যালারি থেকে ফটো Base64 হিসেবে যুক্ত হয়েছে! 🖼️");
+    } catch (err) {
+      showToast("ছবি প্রসেস করতে ত্রুটি হয়েছে");
+    }
+  };
+
   const handleAddQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newQuiz.name) return;
@@ -285,6 +338,19 @@ export default function AdminPage() {
     }
   };
 
+  const saveLocalSubjectImage = (key: string, url?: string) => {
+    if (typeof window === "undefined" || !key) return;
+    try {
+      const cached = JSON.parse(localStorage.getItem("quiz_mate_subject_images") || "{}");
+      if (url) {
+        cached[key] = url;
+      } else {
+        delete cached[key];
+      }
+      localStorage.setItem("quiz_mate_subject_images", JSON.stringify(cached));
+    } catch (e) {}
+  };
+
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubject.name) return;
@@ -296,13 +362,18 @@ export default function AdminPage() {
         slug: slugVal,
         classId: newSubject.classId,
         color: newSubject.color,
+        imageUrl: newSubject.imageUrl || undefined,
         totalQuizzes: 0,
         totalStudents: 0,
       };
       await addSubject(item);
+      if (item.imageUrl) {
+        saveLocalSubjectImage(item.id, item.imageUrl);
+        saveLocalSubjectImage(item.slug, item.imageUrl);
+      }
       setSubjects([...subjects, item]);
       setIsAddSubjectOpen(false);
-      setNewSubject({ name: "", slug: "", classId: "class6", color: "#0D9488" });
+      setNewSubject({ name: "", slug: "", classId: "class6", color: "#0D9488", imageUrl: "" });
       showToast("Firebase-এ নতুন বিষয় যুক্ত হয়েছে! 📚");
     } catch (err) {
       showToast("ত্রুটি: বিষয় যুক্ত করা যায়নি");
@@ -318,7 +389,12 @@ export default function AdminPage() {
         classId: editingSubject.classId,
         slug: editingSubject.slug,
         color: editingSubject.color,
+        imageUrl: editingSubject.imageUrl || undefined,
       });
+      if (editingSubject.imageUrl) {
+        saveLocalSubjectImage(editingSubject.id, editingSubject.imageUrl);
+        saveLocalSubjectImage(editingSubject.slug, editingSubject.imageUrl);
+      }
       setSubjects(subjects.map((s) => (s.id === editingSubject.id ? editingSubject : s)));
       setEditingSubject(null);
       showToast("বিষয় সফলভাবে আপডেট ও নতুন ক্লাসে সেট হয়েছে! ✏️");
@@ -766,10 +842,17 @@ export default function AdminPage() {
                       return (
                         <div
                           key={sub.id}
-                          className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-slate-700 transition-all"
+                          className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-slate-700 transition-all min-h-[110px]"
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800 text-teal-300 border border-teal-500/20">
+                          {sub.imageUrl && (
+                            <div className="absolute inset-0 opacity-25 pointer-events-none z-0">
+                              <img src={sub.imageUrl} alt={sub.name} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent" />
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between relative z-10">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800/90 text-teal-300 border border-teal-500/20 shadow-xs">
                               {classNameStr}
                             </span>
                             <div className="flex items-center gap-1.5">
@@ -777,22 +860,22 @@ export default function AdminPage() {
                               <button
                                 onClick={() => setEditingSubject(sub)}
                                 title="এডিট করুন"
-                                className="h-6 w-6 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center hover:bg-amber-500/20 transition-all opacity-0 group-hover:opacity-100"
+                                className="h-6 w-6 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center hover:bg-amber-500 transition-all opacity-0 group-hover:opacity-100 shadow"
                               >
                                 <Edit3 width={11} height={11} />
                               </button>
                               <button
                                 onClick={() => handleDeleteSubject(sub.id)}
                                 title="ডিলিট করুন"
-                                className="h-6 w-6 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center hover:bg-rose-500/20 transition-all opacity-0 group-hover:opacity-100"
+                                className="h-6 w-6 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center justify-center hover:bg-rose-500 transition-all opacity-0 group-hover:opacity-100 shadow"
                               >
                                 <Trash2 width={11} height={11} />
                               </button>
                             </div>
                           </div>
-                          <div>
-                            <h3 className="text-lg font-black text-white">{sub.name}</h3>
-                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {sub.id} · Slug: /{sub.slug}</p>
+                          <div className="relative z-10 pt-1">
+                            <h3 className="text-lg font-black text-white drop-shadow-sm">{sub.name}</h3>
+                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {sub.id} · Slug: /{sub.slug}</p>
                           </div>
                         </div>
                       );
@@ -1167,6 +1250,53 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৩. কভার ইমেজ (Subject Cover Image)</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="add-cover-file"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-indigo-900/60 hover:bg-indigo-800/80 border border-indigo-500/40 rounded-xl text-indigo-200 text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-sm"
+                    >
+                      <Upload width={13} height={13} />
+                      গ্যালারি থেকে ফটো বাছাই করুন 🖼️
+                    </label>
+                    <input
+                      id="add-cover-file"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageFileChange(e, false)}
+                      className="hidden"
+                    />
+                    <span className="text-[10px] text-slate-500 font-bold">অথবা লিঙ্ক:</span>
+                  </div>
+
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/.../book.jpg"
+                    value={newSubject.imageUrl}
+                    onChange={(e) => setNewSubject({ ...newSubject, imageUrl: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                  />
+
+                  {newSubject.imageUrl ? (
+                    <div className="relative h-20 w-full rounded-xl overflow-hidden border border-slate-700 bg-slate-950">
+                      <img src={newSubject.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setNewSubject({ ...newSubject, imageUrl: "" })}
+                        className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-slate-900/80 text-rose-400 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all shadow"
+                      >
+                        <X width={12} height={12} />
+                      </button>
+                      <span className="absolute bottom-1 left-2 text-[9px] font-extrabold bg-black/70 px-1.5 py-0.5 rounded text-emerald-300">
+                        ✓ কভার ইমেজ নির্বাচিত
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setIsAddSubjectOpen(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
                 <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold shadow-lg">Firebase-এ সেভ করুন</button>
@@ -1237,6 +1367,53 @@ export default function AdminPage() {
                     />
                     <span className="text-[10px] text-slate-400 font-mono">{editingSubject.color || "#0D9488"}</span>
                   </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৩. কভার ইমেজ (Subject Cover Image)</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="edit-cover-file"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-amber-900/60 hover:bg-amber-800/80 border border-amber-500/40 rounded-xl text-amber-200 text-xs font-bold cursor-pointer transition-all active:scale-95 shadow-sm"
+                    >
+                      <Upload width={13} height={13} />
+                      গ্যালারি থেকে ফটো পরিবর্তন করুন 🖼️
+                    </label>
+                    <input
+                      id="edit-cover-file"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageFileChange(e, true)}
+                      className="hidden"
+                    />
+                    <span className="text-[10px] text-slate-500 font-bold">অথবা লিঙ্ক:</span>
+                  </div>
+
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/.../book.jpg"
+                    value={editingSubject.imageUrl || ""}
+                    onChange={(e) => setEditingSubject({ ...editingSubject, imageUrl: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-mono text-[11px]"
+                  />
+
+                  {editingSubject.imageUrl ? (
+                    <div className="relative h-20 w-full rounded-xl overflow-hidden border border-slate-700 bg-slate-950">
+                      <img src={editingSubject.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setEditingSubject({ ...editingSubject, imageUrl: "" })}
+                        className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-slate-900/80 text-rose-400 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all shadow"
+                      >
+                        <X width={12} height={12} />
+                      </button>
+                      <span className="absolute bottom-1 left-2 text-[9px] font-extrabold bg-black/70 px-1.5 py-0.5 rounded text-amber-300">
+                        ✓ কভার ইমেজ নির্বাচিত
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

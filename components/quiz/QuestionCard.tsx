@@ -2,7 +2,7 @@
 
 import AnswerOption from "./AnswerOption";
 import { Question } from "@/types/firestore";
-import { HelpCircle, Sparkles } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 
 interface QuestionCardProps {
   question: Question;

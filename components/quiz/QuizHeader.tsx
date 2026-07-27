@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, BookOpen, X, ShieldAlert } from "lucide-react";
+import { Clock, BookOpen, X } from "lucide-react";
 
 interface QuizHeaderProps {
   subject: string;
@@ -12,8 +12,8 @@ interface QuizHeaderProps {
 
 export default function QuizHeader({
   subject,
-  currentQuestion,
-  totalQuestions,
+  currentQuestion: _currentQuestion,
+  totalQuestions: _totalQuestions,
   timeLeft,
   onExit,
 }: QuizHeaderProps) {

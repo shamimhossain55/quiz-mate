@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useState,
+  useCallback,
   ReactNode,
 } from "react";
 
@@ -29,9 +30,9 @@ export function QuizTimerProvider({
 }: Props) {
   const [timeLeft, setTimeLeft] = useState(0);
 
-  function resetTimer(seconds: number) {
+  const resetTimer = useCallback((seconds: number) => {
     setTimeLeft(seconds);
-  }
+  }, []);
 
   return (
     <QuizTimerContext.Provider

@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useState,
+  useCallback,
   ReactNode,
 } from "react";
 import { Question } from "@/types/firestore";
@@ -51,11 +52,11 @@ export function QuizProvider({
     Question[]
   >([]);
 
-  function resetQuiz() {
+  const resetQuiz = useCallback(() => {
     setCurrentQuestion(1);
     setAnswers({});
     setPlayedQuestions([]);
-  }
+  }, []);
 
   return (
     <QuizContext.Provider

@@ -35,17 +35,21 @@ type SubjectItem = {
   icon: LucideIcon;
   color: string;
   gradient: string;
+  shadowColor: string;
   progress: number;
   chaptersCount?: number;
+  completedChapters?: number;
+  tagline?: string;
+  imageUrl?: string;
 };
 
 const defaultSubjects: SubjectItem[] = [
-  { id: "bangla", name: "বাংলা", slug: "bangla", icon: BookOpen, color: "#0D9488", gradient: "linear-gradient(145deg, #0D9488 0%, #047857 100%)", progress: 85, chaptersCount: 18 },
-  { id: "english", name: "English", slug: "english", icon: Languages, color: "#F87171", gradient: "linear-gradient(145deg, #F87171 0%, #E11D48 100%)", progress: 62, chaptersCount: 10 },
-  { id: "math", name: "গণিত", slug: "math", icon: Calculator, color: "#6366F1", gradient: "linear-gradient(145deg, #6366F1 0%, #4338CA 100%)", progress: 74, chaptersCount: 11 },
-  { id: "science", name: "বিজ্ঞান", slug: "science", icon: FlaskConical, color: "#F59E0B", gradient: "linear-gradient(145deg, #F59E0B 0%, #D97706 100%)", progress: 90, chaptersCount: 14 },
-  { id: "socialScience", name: "সমাজবিজ্ঞান", slug: "bgs", icon: Globe2, color: "#14B8A6", gradient: "linear-gradient(145deg, #14B8A6 0%, #0F766E 100%)", progress: 55, chaptersCount: 8 },
-  { id: "ict", name: "আইসিটি", slug: "ict", icon: BarChart3, color: "#EC4899", gradient: "linear-gradient(145deg, #EC4899 0%, #BE185D 100%)", progress: 80, chaptersCount: 9 },
+  { id: "bangla", name: "বাংলা", slug: "bangla", icon: BookOpen, color: "#0D9488", gradient: "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #047857 100%)", shadowColor: "rgba(13, 148, 136, 0.4)", progress: 85, chaptersCount: 18, completedChapters: 15, tagline: "ভাষা ও সাহিত্য" },
+  { id: "english", name: "English", slug: "english", icon: Languages, color: "#F43F5E", gradient: "linear-gradient(135deg, #E11D48 0%, #F43F5E 50%, #BE123C 100%)", shadowColor: "rgba(244, 63, 94, 0.4)", progress: 62, chaptersCount: 10, completedChapters: 6, tagline: "Grammar & Vocab" },
+  { id: "math", name: "গণিত", slug: "math", icon: Calculator, color: "#6366F1", gradient: "linear-gradient(135deg, #4338CA 0%, #6366F1 50%, #3730A3 100%)", shadowColor: "rgba(99, 102, 241, 0.4)", progress: 74, chaptersCount: 11, completedChapters: 8, tagline: "বীজগণিত ও জ্যামিতি" },
+  { id: "science", name: "বিজ্ঞান", slug: "science", icon: FlaskConical, color: "#D97706", gradient: "linear-gradient(135deg, #D97706 0%, #F59E0B 50%, #B45309 100%)", shadowColor: "rgba(245, 158, 11, 0.4)", progress: 90, chaptersCount: 14, completedChapters: 13, tagline: "পদার্থ, রসায়ন ও জীব" },
+  { id: "socialScience", name: "সমাজবিজ্ঞান", slug: "bgs", icon: Globe2, color: "#0284C7", gradient: "linear-gradient(135deg, #0369A1 0%, #0284C7 50%, #075985 100%)", shadowColor: "rgba(2, 132, 199, 0.4)", progress: 55, chaptersCount: 8, completedChapters: 4, tagline: "বাংলাদেশ ও বিশ্বপরিচয়" },
+  { id: "ict", name: "আইসিটি", slug: "ict", icon: BarChart3, color: "#DB2777", gradient: "linear-gradient(135deg, #BE185D 0%, #DB2777 50%, #9D174D 100%)", shadowColor: "rgba(219, 39, 119, 0.4)", progress: 80, chaptersCount: 9, completedChapters: 7, tagline: "তথ্য ও যোগাযোগ প্রযুক্তি" },
 ];
 
 export default function DashboardPage() {
@@ -70,15 +74,37 @@ export default function DashboardPage() {
           if (profile) setStudent(profile);
         }
 
+        let localImages: Record<string, string> = {};
+        try {
+          const cached = localStorage.getItem("quiz_mate_subject_images");
+          if (cached) localImages = JSON.parse(cached);
+        } catch (e) {}
+
         const firestoreSubjects = await getSubjects("class6");
         if (firestoreSubjects && firestoreSubjects.length > 0) {
-          const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => ({
-            id: s.id, name: s.name, slug: s.slug || s.id,
-            icon: defaultSubjects[idx % defaultSubjects.length].icon,
-            color: defaultSubjects[idx % defaultSubjects.length].color,
-            gradient: defaultSubjects[idx % defaultSubjects.length].gradient,
-            progress: 70 + ((idx * 7) % 25),
-            chaptersCount: s.slug === "bangla" ? 18 : s.slug === "math" ? 11 : s.slug === "science" ? 14 : 10,
+          const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => {
+            const def = defaultSubjects[idx % defaultSubjects.length];
+            const img = s.imageUrl || localImages[s.id] || localImages[s.slug] || def.imageUrl;
+            return {
+              id: s.id,
+              name: s.name,
+              slug: s.slug || s.id,
+              icon: def.icon,
+              color: def.color,
+              gradient: def.gradient,
+              shadowColor: def.shadowColor,
+              progress: 70 + ((idx * 7) % 25),
+              chaptersCount: s.slug === "bangla" ? 18 : s.slug === "math" ? 11 : s.slug === "science" ? 14 : 10,
+              completedChapters: def.completedChapters,
+              tagline: def.tagline,
+              imageUrl: img,
+            };
+          });
+          setSubjectsList(mapped);
+        } else {
+          const mapped = defaultSubjects.map((def) => ({
+            ...def,
+            imageUrl: localImages[def.id] || localImages[def.slug] || def.imageUrl,
           }));
           setSubjectsList(mapped);
         }
@@ -250,47 +276,90 @@ export default function DashboardPage() {
 
           {/* ===== SUBJECT BOOK GRID ===== */}
           <div>
-            <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-1.5">
-                <Sparkles width={13} height={13} className="text-amber-500" />
-                <p className="text-[11px] font-extrabold text-slate-700 uppercase tracking-widest">পাঠ্যবই</p>
+                <Sparkles width={14} height={14} className="text-amber-500 fill-amber-400" />
+                <p className="text-[11px] font-black text-slate-800 uppercase tracking-widest">পাঠ্যবই ও বিষয়সমূহ</p>
               </div>
-              <span onClick={() => router.push("/subjects")} className="text-[10px] font-bold text-teal-700 cursor-pointer hover:underline flex items-center gap-0.5">
-                সব দেখুন <ChevronRight width={11} height={11} />
+              <span onClick={() => router.push("/subjects")} className="text-[10px] font-extrabold text-teal-700 cursor-pointer hover:text-teal-900 transition-colors flex items-center gap-0.5 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200">
+                সব দেখুন <ChevronRight width={12} height={12} />
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+
+            <div className="grid grid-cols-2 gap-3.5">
               {subjectsList.map((subject) => {
                 const Icon = subject.icon;
+                const totalCh = subject.chaptersCount || 10;
+                const completedCh = subject.completedChapters || Math.round((subject.progress / 100) * totalCh);
+
                 return (
                   <div
                     key={subject.id}
                     onClick={() => router.push(`/subject/${subject.slug}`)}
-                    className="rounded-2xl p-2.5 flex flex-col justify-between relative cursor-pointer active:scale-95 hover:-translate-y-1 transition-all duration-300 overflow-hidden group"
-                    style={{ background: subject.gradient, minHeight: "120px", boxShadow: `0 8px 20px ${subject.color}35` }}
+                    className="relative rounded-3xl p-4 flex flex-col justify-between cursor-pointer active:scale-95 hover:-translate-y-2 transition-all duration-300 overflow-hidden group min-h-[215px] border border-white/25 shadow-xl"
+                    style={{
+                      background: subject.gradient,
+                      boxShadow: `0 14px 32px ${subject.shadowColor || "rgba(0,0,0,0.3)"}`,
+                    }}
                   >
-                    {/* স্পাইন শ্যাডো */}
-                    <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-gradient-to-r from-black/25 to-transparent pointer-events-none" />
-                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/15 rounded-full blur-md pointer-events-none" />
-
-                    <div className="flex items-center justify-between relative z-10">
-                      <div className="h-7 w-7 rounded-xl bg-white/25 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner">
-                        <Icon width={14} height={14} className="text-white" />
+                    {/* Subject Cover Image (Base64 / URL from Admin Phone Gallery Upload) */}
+                    {subject.imageUrl ? (
+                      <div className="absolute inset-0 z-0">
+                        <img
+                          src={subject.imageUrl}
+                          alt={subject.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent" />
                       </div>
-                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-black/20 text-white border border-white/20">
-                        {subject.progress}%
-                      </span>
+                    ) : null}
+
+                    {/* 3D Real Book Spine Edge */}
+                    <div className="absolute top-0 bottom-0 left-0 w-2.5 bg-gradient-to-r from-black/50 via-black/25 to-transparent border-r border-white/15 pointer-events-none z-10" />
+
+                    {/* Top Page Stack Paper Lines Effect */}
+                    <div className="absolute top-0 right-4 left-4 h-1 bg-white/20 rounded-b pointer-events-none z-10" />
+
+                    {/* Ambient Floating Glow Orb */}
+                    <div className="absolute -top-8 -right-8 w-24 h-24 bg-white/15 rounded-full blur-xl pointer-events-none group-hover:scale-150 transition-transform duration-500 z-10" />
+
+                    {/* Top Row: Progress Badge (Extra logo/icon removed for clean book cover!) */}
+                    <div className="flex items-center justify-end relative z-10">
+                      <div className="flex items-center gap-1 bg-black/40 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 text-[9.5px] font-black text-white shadow-sm">
+                        <Zap width={11} height={11} className="text-amber-300 fill-amber-300" />
+                        <span>{subject.progress}%</span>
+                      </div>
                     </div>
 
-                    <div className="relative z-10 mt-auto">
-                      <p className="text-[8px] text-white/75 font-extrabold uppercase tracking-wider">
-                        {subject.chaptersCount ?? "—"} অধ্যায়
-                      </p>
-                      <h4 className="text-[11px] font-extrabold text-white leading-snug truncate mt-0.5 group-hover:text-amber-200 transition-colors">
+                    {/* Middle & Bottom: Subject Info */}
+                    <div className="relative z-10 mt-auto pt-4 pl-1">
+                      <span className="text-[9px] font-black text-amber-200 uppercase tracking-widest bg-black/20 backdrop-blur-xs px-2 py-0.5 rounded-md border border-white/15 inline-block mb-1.5">
+                        {completedCh}/{totalCh} অধ্যায় সম্পন্ন
+                      </span>
+
+                      <h4 className="text-base font-black text-white leading-tight truncate group-hover:text-amber-200 transition-colors">
                         {subject.name}
                       </h4>
-                      <div className="mt-1.5 h-1 w-full rounded-full bg-black/25 overflow-hidden">
-                        <div className="h-full rounded-full bg-white/80 transition-all" style={{ width: `${subject.progress}%` }} />
+
+                      <p className="text-[10px] font-bold text-white/80 truncate mt-0.5">
+                        {subject.tagline || "পাঠ্যবই ও অনুশীলনী"}
+                      </p>
+
+                      {/* Progress Bar & Read Action */}
+                      <div className="mt-3 space-y-1.5">
+                        <div className="h-1.5 w-full rounded-full bg-black/35 overflow-hidden p-0.5 border border-white/15">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-amber-300 via-yellow-200 to-white shadow-[0_0_10px_rgba(255,255,255,0.9)] transition-all duration-700"
+                            style={{ width: `${subject.progress}%` }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between pt-0.5 text-[9.5px] font-extrabold text-white/90">
+                          <span className="group-hover:text-amber-200 transition-colors">পড়া শুরু করো</span>
+                          <div className="h-5 w-5 rounded-full bg-white/25 backdrop-blur-md flex items-center justify-center border border-white/30 group-hover:bg-white group-hover:text-slate-900 transition-all">
+                            <ChevronRight width={12} height={12} className="text-white group-hover:text-slate-900 transition-colors" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
