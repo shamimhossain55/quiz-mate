@@ -36,6 +36,7 @@ export type AdminSubject = {
   name: string;
   slug: string;
   classId: string;
+  group?: string;
   totalQuizzes?: number;
   totalStudents?: number;
   color?: string;

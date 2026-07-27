@@ -15,20 +15,48 @@ import { FirestoreSubject } from "@/types/firestore";
  * Dashboard-এর জন্য
  */
 export async function getSubjects(
-  classId: string
+  classId?: string,
+  group?: string
 ): Promise<FirestoreSubject[]> {
-  const q = query(
-    collection(db, "subjects"),
-    where("classId", "==", classId),
-    orderBy("order", "asc")
-  );
+  try {
+    const colRef = collection(db, "subjects");
+    const snapshot = await getDocs(colRef);
 
-  const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return [];
+    }
 
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<FirestoreSubject, "id">),
-  }));
+    let docs = snapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      ...(docSnap.data() as Omit<FirestoreSubject, "id">),
+    }));
+
+    // Filter by classId if provided and matching subjects exist
+    if (classId) {
+      const filteredByClass = docs.filter((s) => s.classId === classId);
+      if (filteredByClass.length > 0) {
+        docs = filteredByClass;
+      }
+    }
+
+    // Filter by group if specified (shows subject if group is missing, 'all', or matches student's group)
+    if (group && group !== "all") {
+      const filteredByGroup = docs.filter(
+        (s) => !s.group || s.group === "all" || s.group === group
+      );
+      if (filteredByGroup.length > 0) {
+        docs = filteredByGroup;
+      }
+    }
+
+    // Client-side sort by order or name
+    docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+
+    return docs;
+  } catch (err) {
+    console.error("Error fetching subjects:", err);
+    return [];
+  }
 }
 
 /**

@@ -157,7 +157,7 @@ export default function AdminPage() {
   const [selectedChapterId, setSelectedChapterId] = useState("");
 
   const [newQuiz, setNewQuiz] = useState({ name: "", questionsCount: 10, status: "published" as const });
-  const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", color: "#0D9488", imageUrl: "" });
+  const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "" });
   const [newUser, setNewUser] = useState({ name: "", email: "", class: "ক্লাস ৯" });
 
   // Bulk JSON State
@@ -361,10 +361,12 @@ export default function AdminPage() {
         name: newSubject.name,
         slug: slugVal,
         classId: newSubject.classId,
+        group: newSubject.group || "all",
         color: newSubject.color,
         imageUrl: newSubject.imageUrl || undefined,
         totalQuizzes: 0,
         totalStudents: 0,
+        order: subjects.length + 1,
       };
       await addSubject(item);
       if (item.imageUrl) {
@@ -373,7 +375,7 @@ export default function AdminPage() {
       }
       setSubjects([...subjects, item]);
       setIsAddSubjectOpen(false);
-      setNewSubject({ name: "", slug: "", classId: "class6", color: "#0D9488", imageUrl: "" });
+      setNewSubject({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "" });
       showToast("Firebase-এ নতুন বিষয় যুক্ত হয়েছে! 📚");
     } catch (err) {
       showToast("ত্রুটি: বিষয় যুক্ত করা যায়নি");
@@ -1198,19 +1200,35 @@ export default function AdminPage() {
               </button>
             </div>
             <form onSubmit={handleAddSubject} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class) নির্বাচন করুন</label>
-                <select
-                  value={newSubject.classId}
-                  onChange={(e) => setNewSubject({ ...newSubject, classId: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-bold"
-                >
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class)</label>
+                  <select
+                    value={newSubject.classId}
+                    onChange={(e) => setNewSubject({ ...newSubject, classId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-bold"
+                  >
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">বিভাগ/গ্রুপ (Group)</label>
+                  <select
+                    value={newSubject.group || "all"}
+                    onChange={(e) => setNewSubject({ ...newSubject, group: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500 font-bold"
+                  >
+                    <option value="all">সকল বিভাগ (All)</option>
+                    <option value="science">বিজ্ঞান (Science)</option>
+                    <option value="commerce">ব্যবসায় শিক্ষা (Commerce)</option>
+                    <option value="arts">মানবিক (Arts)</option>
+                  </select>
+                </div>
               </div>
 
               <div>

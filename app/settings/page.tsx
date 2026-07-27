@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { signOut } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signOut, useSession } from "next-auth/react";
 import {
   Camera,
   User,
@@ -23,31 +23,73 @@ import {
   Crown,
   Flame,
   Zap,
+  GraduationCap,
+  Check,
+  Loader2,
 } from "lucide-react";
 import BottomNav from "@/components/layout/BottomNav";
+import { getStudentProfile, updateStudentProfile } from "@/lib/firestore/student";
+import { Student } from "@/types/firestore";
 
-/**
- * Premium Settings (সেটিংস) Page
- * প্রিমিয়াম প্রোফাইল কার্ড, গ্রুপড সেটিংস সেকশন, অ্যাচিভমেন্ট ব্যাজ
- */
+const CLASSES_LIST = [
+  { id: "class6", name: "ষষ্ঠ শ্রেণী (Class 6)" },
+  { id: "class7", name: "সপ্তম শ্রেণী (Class 7)" },
+  { id: "class8", name: "অষ্টম শ্রেণী (Class 8)" },
+  { id: "class9", name: "নবম শ্রেণী (Class 9)" },
+  { id: "class10", name: "দশম শ্রেণী (Class 10)" },
+  { id: "class11", name: "একাদশ শ্রেণী (Class 11)" },
+  { id: "class12", name: "দ্বাদশ শ্রেণী (Class 12)" },
+];
 
-// এখানে পরে Firestore/Auth থেকে আসল ডেটা fetch করে বসাবেন
-const user = {
-  name: "শামীম হোসেন",
-  phone: "01704***1",
-  email: "abc@gmail.com",
-  password: "********",
-  language: "বাংলা",
-  avatarUrl: null as string | null,
-  level: 12,
-  xp: 1250,
-  streak: 7,
-  quizCount: 42,
-  joinDate: "মার্চ ২০২৬",
-};
+const GROUPS_LIST = [
+  { id: "all", name: "সাধারণ (General)" },
+  { id: "science", name: "বিজ্ঞান (Science)" },
+  { id: "commerce", name: "ব্যবসায় শিক্ষা (Commerce)" },
+  { id: "arts", name: "মানবিক (Arts)" },
+];
 
 export default function SettingsPage() {
+  const { data: session } = useSession();
   const [showPassword, setShowPassword] = useState(false);
+  const [student, setStudent] = useState<Student | null>(null);
+  const [classId, setClassId] = useState("class6");
+  const [group, setGroup] = useState("all");
+  const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadProfile() {
+      if (session?.user?.email) {
+        const profile = await getStudentProfile(session.user.email);
+        if (profile) {
+          setStudent(profile);
+          setClassId(profile.classId || "class6");
+          setGroup(profile.group || "all");
+        }
+      }
+    }
+    loadProfile();
+  }, [session]);
+
+  const handleSaveClassGroup = async () => {
+    if (!session?.user?.email) return;
+    setIsSaving(true);
+    try {
+      await updateStudentProfile({
+        studentId: session.user.email,
+        classId,
+        group,
+      });
+      setStudent((prev) => (prev ? { ...prev, classId, group } : null));
+      setToast("শ্রেণী ও বিভাগ সফলভাবে পরিবর্তন হয়েছে! 🎉");
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      setToast("ত্রুটি: প্রোফাইল আপডেট করা যায়নি");
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleLogout = () => {
     signOut({ callbackUrl: "/" });
@@ -93,12 +135,12 @@ export default function SettingsPage() {
               <div className="relative flex-shrink-0">
                 <div className="h-16 w-16 rounded-full p-[2px] bg-gradient-to-tr from-amber-300 via-white/60 to-teal-200 shadow-md">
                   <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden border border-white/20">
-                    {user.avatarUrl ? (
+                    {student?.avatarUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
+                      <img src={student.avatarUrl} alt={student?.name || "Student"} className="h-full w-full object-cover" />
                     ) : (
                       <span className="text-teal-300 font-extrabold text-xl">
-                        {user.name.slice(0, 1)}
+                        {(student?.name || session?.user?.name || "S").charAt(0).toUpperCase()}
                       </span>
                     )}
                   </div>
@@ -115,32 +157,101 @@ export default function SettingsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <h2 className="text-base font-extrabold text-white truncate leading-tight">
-                    {user.name}
+                    {student?.name || session?.user?.name || "শামীম হোসেন"}
                   </h2>
                   <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-amber-200 text-[8px] font-extrabold border border-white/20 flex items-center gap-0.5">
                     <Crown width={9} height={9} /> Pro
                   </span>
                 </div>
                 <p className="text-[10px] text-teal-100/80 font-medium mt-0.5">
-                  যোগদান: {user.joinDate}
+                  ইমেইল: {student?.email || session?.user?.email || "student@gmail.com"}
                 </p>
 
                 {/* মিনি স্ট্যাটস রো */}
                 <div className="flex items-center gap-2 mt-2">
                   <div className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20">
                     <Zap width={10} height={10} className="text-amber-300" />
-                    <span className="text-[9px] font-extrabold text-white">{user.xp} XP</span>
+                    <span className="text-[9px] font-extrabold text-white">{student?.point || 1250} XP</span>
                   </div>
                   <div className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20">
                     <Flame width={10} height={10} className="text-orange-300 fill-orange-300" />
-                    <span className="text-[9px] font-extrabold text-white">{user.streak}d</span>
+                    <span className="text-[9px] font-extrabold text-white">{student?.streak || 7}d</span>
                   </div>
                   <div className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-md border border-white/20">
                     <Star width={10} height={10} className="text-amber-300 fill-amber-300" />
-                    <span className="text-[9px] font-extrabold text-white">Lvl {user.level}</span>
+                    <span className="text-[9px] font-extrabold text-white">Lvl {student?.level || 12}</span>
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* টোস্ট নোটিফিকেশন */}
+          {toast && (
+            <div className="rounded-xl p-3 bg-emerald-500 text-white font-extrabold text-xs text-center shadow-lg border border-emerald-400 animate-pulse">
+              {toast}
+            </div>
+          )}
+
+          {/* শ্রেণী ও বিভাগ পরিবর্তন সেকশন */}
+          <div>
+            <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-2 px-1 flex items-center gap-1">
+              <GraduationCap width={13} height={13} className="text-indigo-600" />
+              শ্রেণী ও বিভাগ (Class & Group)
+            </p>
+            <div className="rounded-2xl bg-white border border-slate-200/80 p-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  তোমার শ্রেণী (Class)
+                </label>
+                <select
+                  value={classId}
+                  onChange={(e) => setClassId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-extrabold text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {CLASSES_LIST.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  বিভাগ/গ্রুপ (Group)
+                </label>
+                <select
+                  value={group}
+                  onChange={(e) => setGroup(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-extrabold text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  {GROUPS_LIST.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveClassGroup}
+                disabled={isSaving}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 width={14} height={14} className="animate-spin" />
+                    <span>সংরক্ষণ হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check width={14} height={14} />
+                    <span>শ্রেণী ও বিভাগ পরিবর্তন সংরক্ষণ করুন</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -148,13 +259,12 @@ export default function SettingsPage() {
           <div>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">অ্যাকাউন্ট তথ্য</p>
             <div className="rounded-2xl bg-white border border-slate-200/80 shadow-[0_2px_8px_rgba(15,23,42,0.04)] overflow-hidden divide-y divide-slate-100">
-              <FieldRow icon={User} label="নাম" value={user.name} iconColor="text-teal-700" iconBg="bg-teal-50" />
-              <FieldRow icon={Phone} label="ফোন" value={user.phone} iconColor="text-indigo-700" iconBg="bg-indigo-50" />
-              <FieldRow icon={Mail} label="ইমেইল" value={user.email} iconColor="text-amber-700" iconBg="bg-amber-50" />
+              <FieldRow icon={User} label="নাম" value={student?.name || session?.user?.name || "শিক্ষার্থী"} iconColor="text-teal-700" iconBg="bg-teal-50" />
+              <FieldRow icon={Mail} label="ইমেইল" value={student?.email || session?.user?.email || "ইমেইল নেই"} iconColor="text-amber-700" iconBg="bg-amber-50" />
               <FieldRow
                 icon={Lock}
                 label="পাসওয়ার্ড"
-                value={showPassword ? "MyP@ssw0rd" : user.password}
+                value={showPassword ? "MyP@ssw0rd" : "********"}
                 iconColor="text-rose-700"
                 iconBg="bg-rose-50"
                 trailing={
@@ -174,7 +284,7 @@ export default function SettingsPage() {
           <div>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 px-1">পছন্দসমূহ</p>
             <div className="rounded-2xl bg-white border border-slate-200/80 shadow-[0_2px_8px_rgba(15,23,42,0.04)] overflow-hidden divide-y divide-slate-100">
-              <FieldRow icon={Globe} label="ভাষা" value={user.language} iconColor="text-teal-700" iconBg="bg-teal-50" />
+              <FieldRow icon={Globe} label="ভাষা" value="বাংলা" iconColor="text-teal-700" iconBg="bg-teal-50" />
               <FieldRow icon={Bell} label="নোটিফিকেশন" value="চালু" iconColor="text-violet-700" iconBg="bg-violet-50" />
               <FieldRow icon={Palette} label="থিম" value="লাইট মোড" iconColor="text-pink-700" iconBg="bg-pink-50" />
             </div>

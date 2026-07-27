@@ -20,6 +20,7 @@ import {
   Zap,
   Trophy,
   Crown,
+  GraduationCap,
   LucideIcon,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -27,6 +28,24 @@ import BottomNav from "@/components/layout/BottomNav";
 import { getSubjects } from "@/lib/firestore/subjects";
 import { getStudentProfile } from "@/lib/firestore/student";
 import { Student } from "@/types/firestore";
+
+const CLASS_NAMES: Record<string, string> = {
+  class6: "ষষ্ঠ শ্রেণী",
+  class7: "সপ্তম শ্রেণী",
+  class8: "অষ্টম শ্রেণী",
+  class9: "নবম শ্রেণী",
+  class10: "দশম শ্রেণী",
+  class11: "একাদশ শ্রেণী",
+  class12: "দ্বাদশ শ্রেণী",
+};
+
+const GROUP_NAMES: Record<string, string> = {
+  all: "সাধারণ",
+  general: "সাধারণ",
+  science: "বিজ্ঞান",
+  commerce: "ব্যবসায় শিক্ষা",
+  arts: "মানবিক",
+};
 
 type SubjectItem = {
   id: string;
@@ -69,9 +88,10 @@ export default function DashboardPage() {
 
     async function loadData() {
       try {
+        let studentProfile = null;
         if (session?.user?.email) {
-          const profile = await getStudentProfile(session.user.email);
-          if (profile) setStudent(profile);
+          studentProfile = await getStudentProfile(session.user.email);
+          if (studentProfile) setStudent(studentProfile);
         }
 
         let localImages: Record<string, string> = {};
@@ -80,7 +100,9 @@ export default function DashboardPage() {
           if (cached) localImages = JSON.parse(cached);
         } catch (e) {}
 
-        const firestoreSubjects = await getSubjects("class6");
+        const targetClassId = studentProfile?.classId || "class6";
+        const targetGroup = studentProfile?.group || "all";
+        const firestoreSubjects = await getSubjects(targetClassId, targetGroup);
         if (firestoreSubjects && firestoreSubjects.length > 0) {
           const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => {
             const def = defaultSubjects[idx % defaultSubjects.length];
@@ -90,13 +112,13 @@ export default function DashboardPage() {
               name: s.name,
               slug: s.slug || s.id,
               icon: def.icon,
-              color: def.color,
-              gradient: def.gradient,
-              shadowColor: def.shadowColor,
+              color: s.color || def.color,
+              gradient: s.color ? `linear-gradient(135deg, ${s.color} 0%, #0F766E 100%)` : def.gradient,
+              shadowColor: s.color ? `${s.color}60` : def.shadowColor,
               progress: 70 + ((idx * 7) % 25),
               chaptersCount: s.slug === "bangla" ? 18 : s.slug === "math" ? 11 : s.slug === "science" ? 14 : 10,
               completedChapters: def.completedChapters,
-              tagline: def.tagline,
+              tagline: s.description || def.tagline || "পাঠ্যবই ও অনুশীলনী",
               imageUrl: img,
             };
           });
@@ -131,18 +153,32 @@ export default function DashboardPage() {
               {/* গ্রেডিয়েন্ট অ্যাভাটার রিং */}
               <div className="relative">
                 <div className="h-12 w-12 rounded-full p-[2.5px] bg-gradient-to-tr from-teal-500 via-emerald-400 to-indigo-500 shadow-lg">
-                  <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center border border-white/10">
-                    <span className="text-teal-300 font-black text-lg">S</span>
+                  <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center border border-white/10 overflow-hidden">
+                    {student?.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={student.avatarUrl} alt={student.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-teal-300 font-black text-lg">
+                        {(student?.name || session?.user?.name || "S").charAt(0).toUpperCase()}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <span className="absolute -bottom-0.5 -right-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-emerald-500 text-[9px] font-black text-white ring-2 ring-slate-50 shadow">✓</span>
               </div>
               <div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded-full border border-teal-100">Lvl 12 · Pro</span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded-full border border-teal-100">
+                    Lvl {student?.level || 12} · Pro
+                  </span>
+                  <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 flex items-center gap-1 shadow-2xs">
+                    <GraduationCap width={11} height={11} className="text-indigo-600" />
+                    {CLASS_NAMES[student?.classId || "class6"] || student?.classId || "ষষ্ঠ শ্রেণী"}
+                    {student?.group && student.group !== "all" ? ` (${GROUP_NAMES[student.group] || student.group})` : ""}
+                  </span>
                 </div>
                 <p className="text-slate-900 text-base font-extrabold leading-tight tracking-tight mt-0.5">
-                  {greeting}, শামীম {greetingEmoji}
+                  {greeting}, {student?.name || session?.user?.name || "শিক্ষার্থী"} {greetingEmoji}
                 </p>
               </div>
             </div>

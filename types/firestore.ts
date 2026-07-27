@@ -64,6 +64,7 @@ export interface Student {
   name: string;
   email: string;
   classId?: string;
+  group?: string;
   point: number;
   totalExam: number;
   streak?: number;

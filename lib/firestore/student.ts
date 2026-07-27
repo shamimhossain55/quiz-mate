@@ -38,10 +38,39 @@ export async function getStudentProfile(studentId: string): Promise<Student | nu
       level: data.level || Math.floor((data.point || 0) / 100) + 1,
       avatarUrl: data.avatarUrl || null,
       classId: data.classId || "class6",
+      group: data.group || "all",
     };
   } catch (error) {
     console.error("Error fetching student profile:", error);
     return null;
+  }
+}
+
+export async function updateStudentProfile({
+  studentId,
+  classId,
+  group,
+  name,
+  avatarUrl,
+}: {
+  studentId: string;
+  classId?: string;
+  group?: string;
+  name?: string;
+  avatarUrl?: string | null;
+}) {
+  if (!studentId) return;
+  try {
+    const studentRef = doc(db, "students", studentId);
+    const updateData: Record<string, any> = { updatedAt: new Date() };
+    if (classId !== undefined) updateData.classId = classId;
+    if (group !== undefined) updateData.group = group;
+    if (name !== undefined) updateData.name = name;
+    if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
+
+    await setDoc(studentRef, updateData, { merge: true });
+  } catch (error) {
+    console.error("Error updating student profile:", error);
   }
 }
 
