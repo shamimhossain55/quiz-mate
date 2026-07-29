@@ -347,7 +347,7 @@ export default function ReviewPage() {
 
                   {/* Question Text */}
                   <h3 className="text-sm font-extrabold text-slate-900 leading-snug mb-4">
-                    {question.question}
+                    {question.question || (question as any).questionText}
                   </h3>
 
                   {/* Options */}

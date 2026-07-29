@@ -13,7 +13,7 @@ export default function ChapterCard({ chapter }: ChapterCardProps) {
 
   return (
     <div
-      onClick={() => router.push(`/quiz/setup?chapter=${chapter.id}`)}
+      onClick={() => router.push(`/quiz/setup?chapter=${chapter.id}&subject=${chapter.subjectId || ""}`)}
       className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-teal-300 transition-all duration-200 cursor-pointer group active:scale-[0.99] flex items-center justify-between gap-3"
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">

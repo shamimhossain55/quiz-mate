@@ -9,11 +9,12 @@ import QuizSetupCard from "@/components/quiz/QuizSetupCard";
 interface QuizSetupPageProps {
   searchParams: Promise<{
     chapter?: string;
+    subject?: string;
   }>;
 }
 
 export default function QuizSetupPage({ searchParams }: QuizSetupPageProps) {
-  const { chapter } = use(searchParams);
+  const { chapter, subject } = use(searchParams);
   const router = useRouter();
 
   return (
@@ -84,7 +85,7 @@ export default function QuizSetupPage({ searchParams }: QuizSetupPageProps) {
             </div>
           </div>
         ) : (
-          <QuizSetupCard chapterId={chapter} />
+          <QuizSetupCard chapterId={chapter} subjectId={subject} />
         )}
 
         {/* ── BOTTOM NAV ── */}

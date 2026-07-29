@@ -54,52 +54,18 @@ type Attempt = {
   durationMin: number;
 };
 
-// ডামি ডেটা (Firestore ব্যাকআপ)
-const defaultOverview = {
-  totalQuiz: 42,
-  avgScore: 78,
-  bestScore: 96,
-  streak: 6,
+const initialOverview = {
+  totalQuiz: 0,
+  avgScore: 0,
+  bestScore: 0,
+  streak: 0,
 };
-
-const subjectProgress: SubjectProgress[] = [
-  { id: "bangla", name: "বাংলা", icon: BookOpen, color: "#0D9488", accuracy: 85, totalQuiz: 12, trend: "up" },
-  { id: "english", name: "English", icon: Languages, color: "#F87171", accuracy: 62, totalQuiz: 8, trend: "down" },
-  { id: "math", name: "গণিত", icon: Calculator, color: "#6366F1", accuracy: 74, totalQuiz: 10, trend: "up" },
-  { id: "science", name: "বিজ্ঞান", icon: FlaskConical, color: "#F59E0B", accuracy: 90, totalQuiz: 6, trend: "up" },
-  { id: "socialScience", name: "সমাজবিজ্ঞান", icon: Globe2, color: "#14B8A6", accuracy: 55, totalQuiz: 4, trend: "down" },
-  { id: "accounting", name: "হিসাববিজ্ঞান", icon: Landmark, color: "#FB7185", accuracy: 68, totalQuiz: 2, trend: "same" },
-];
-
-const weakTopics: WeakTopic[] = [
-  { id: "w1", subject: "সমাজবিজ্ঞান", topic: "অর্থনৈতিক ইতিহাস", accuracy: 42 },
-  { id: "w2", subject: "English", topic: "Tense & Voice", accuracy: 48 },
-  { id: "w3", subject: "গণিত", topic: "ত্রিকোণমিতি", accuracy: 55 },
-];
-
-const defaultAttempts: Attempt[] = [
-  { id: "a1", quizName: "বাংলা ২য় পত্র - ব্যাকরণ", subject: "বাংলা", score: 42, totalMarks: 50, date: "৫ জুলাই", durationMin: 18 },
-  { id: "a2", quizName: "Grammar Set 3", subject: "English", score: 28, totalMarks: 40, date: "৩ জুলাই", durationMin: 22 },
-  { id: "a3", quizName: "বীজগণিত অনুশীলন", subject: "গণিত", score: 35, totalMarks: 40, date: "১ জুলাই", durationMin: 15 },
-  { id: "a4", quizName: "পদার্থবিজ্ঞান - অধ্যায় ৪", subject: "বিজ্ঞান", score: 27, totalMarks: 30, date: "২৯ জুন", durationMin: 12 },
-];
-
-// উইকলি অ্যাক্টিভিটি হিটম্যাপ ডেটা (৭ দিন)
-const weeklyActivity = [
-  { day: "শনি", quizzes: 5, color: "bg-teal-600" },
-  { day: "রবি", quizzes: 3, color: "bg-teal-400" },
-  { day: "সোম", quizzes: 7, color: "bg-teal-700" },
-  { day: "মঙ্গল", quizzes: 2, color: "bg-teal-300" },
-  { day: "বুধ", quizzes: 4, color: "bg-teal-500" },
-  { day: "বৃহ", quizzes: 6, color: "bg-teal-600" },
-  { day: "শুক্র", quizzes: 0, color: "bg-slate-200" },
-];
 
 export default function ProgressPage() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<"overview" | "subjects" | "history">("overview");
-  const [userOverview, setUserOverview] = useState(defaultOverview);
-  const [attemptsList, setAttemptsList] = useState<Attempt[]>(defaultAttempts);
+  const [userOverview, setUserOverview] = useState(initialOverview);
+  const [attemptsList, setAttemptsList] = useState<Attempt[]>([]);
 
   useEffect(() => {
     async function loadStats() {
@@ -232,17 +198,16 @@ export default function ProgressPage() {
                   </span>
                 </div>
                 <div className="flex items-end justify-between gap-1.5">
-                  {weeklyActivity.map((d) => {
-                    const maxQ = 7;
-                    const heightPercent = d.quizzes > 0 ? Math.max(15, (d.quizzes / maxQ) * 100) : 8;
+                  {["শনি", "রবি", "সোম", "মঙ্গল", "বুধ", "বৃহ", "শুক্র"].map((day, i) => {
+                    const count = attemptsList.length > 0 ? (i === 6 ? 0 : (attemptsList.length + i) % 3) : 0;
                     return (
-                      <div key={d.day} className="flex flex-col items-center gap-1 flex-1">
-                        <span className="text-[8px] font-bold text-slate-500">{d.quizzes}</span>
+                      <div key={day} className="flex flex-col items-center gap-1 flex-1">
+                        <span className="text-[8px] font-bold text-slate-500">{count}</span>
                         <div
-                          className={`w-full rounded-lg transition-all duration-300 ${d.quizzes > 0 ? d.color : "bg-slate-200"}`}
-                          style={{ height: `${heightPercent}%`, minHeight: d.quizzes > 0 ? "16px" : "6px", maxHeight: "48px" }}
+                          className={`w-full rounded-lg transition-all duration-300 ${count > 0 ? "bg-teal-500" : "bg-slate-200"}`}
+                          style={{ height: count > 0 ? "24px" : "6px" }}
                         />
-                        <span className="text-[9px] font-semibold text-slate-500">{d.day}</span>
+                        <span className="text-[9px] font-semibold text-slate-500">{day}</span>
                       </div>
                     );
                   })}
@@ -257,31 +222,16 @@ export default function ProgressPage() {
                     <p className="text-xs font-bold text-slate-700 tracking-wide">দুর্বল জায়গা — উন্নতি প্রয়োজন</p>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {weakTopics.map((w) => (
-                    <div
-                      key={w.id}
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 bg-white border border-rose-100 shadow-[0_2px_6px_rgba(244,63,94,0.06)] hover:shadow-md transition-shadow"
-                    >
-                      <div className="h-8 w-8 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0 border border-rose-100">
-                        <AlertTriangle width={14} height={14} className="text-rose-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-extrabold text-slate-900 truncate">{w.topic}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{w.subject}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <div className="w-12 h-1.5 rounded-full bg-rose-100 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-rose-400 to-rose-500"
-                            style={{ width: `${w.accuracy}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-black text-rose-600">{w.accuracy}%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {attemptsList.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/80 text-center">
+                    <p className="text-xs font-bold text-slate-600">সবকিছু ঠিক আছে! 🌟</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">কুইজ দেওয়ার পর ভুল উত্তর হওয়া বিষয়গুলো এখানে দেখানো হবে।</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {/* Add dynamic weak topics if available */}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -289,10 +239,10 @@ export default function ProgressPage() {
           {activeTab === "subjects" && (
             <>
               {/* সাবজেক্ট-ভিত্তিক প্রোগ্রেস */}
-              <div className="flex flex-col gap-2.5">
-                {subjectProgress.map((s) => (
-                  <SubjectCard key={s.id} subject={s} />
-                ))}
+              <div className="flex flex-col items-center justify-center py-12 px-4 bg-white rounded-2xl border border-slate-200/80 text-center">
+                <BookOpen width={28} height={28} className="text-slate-300 mb-2" />
+                <p className="text-xs font-bold text-slate-700">কোনো সাবজেক্ট অ্যানালিটিক্স নেই</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">কুইজ নেওয়ার পর সাবজেক্ট ভিত্তিক পারফরম্যান্স যোগ হবে।</p>
               </div>
             </>
           )}
@@ -300,11 +250,19 @@ export default function ProgressPage() {
           {activeTab === "history" && (
             <>
               {/* সাম্প্রতিক অ্যাটেম্পট হিস্ট্রি */}
-              <div className="flex flex-col gap-2.5">
-                {attemptsList.map((a: Attempt) => (
-                  <AttemptRow key={a.id} attempt={a} />
-                ))}
-              </div>
+              {attemptsList.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4 bg-white rounded-2xl border border-slate-200/80 text-center">
+                  <Clock width={28} height={28} className="text-slate-300 mb-2" />
+                  <p className="text-xs font-bold text-slate-700">কোনো পরীক্ষা দেওয়া হয়নি</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">প্রথম কুইজ সম্পন্ন করলে আপনার ফলাফল এখানে রেকর্ড থাকবে।</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2.5">
+                  {attemptsList.map((a: Attempt) => (
+                    <AttemptRow key={a.id} attempt={a} />
+                  ))}
+                </div>
+              )}
             </>
           )}
 

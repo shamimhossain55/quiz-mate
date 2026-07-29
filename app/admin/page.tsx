@@ -49,11 +49,19 @@ import {
   deleteQuizDoc,
   getAllClasses,
   getChaptersBySubject,
+  getAllChapters,
+  addChapter,
+  updateChapter,
+  deleteChapter,
   getAllQuestions,
   addQuestion,
   updateQuestion,
   deleteQuestion,
   addBulkQuestions,
+  getAllBanners,
+  addBannerDoc,
+  updateBannerDoc,
+  deleteBannerDoc,
   AdminUser,
   AdminSubject,
   AdminQuiz,
@@ -61,6 +69,7 @@ import {
   AdminChapter,
   AdminQuestion,
 } from "@/lib/firestore/admin";
+import { BannerSlide } from "@/lib/firestore/banners";
 
 // ===== Types =====
 type NavItem = {
@@ -87,45 +96,32 @@ const sampleJsonTemplate = `[
   }
 ]`;
 
-// ===== Initial Fallback Data =====
-const fallbackUsers: AdminUser[] = [
-  { id: "u1", name: "আয়েশা রহমান", email: "ayesha@gmail.com", class: "ক্লাস ৯", xp: 1240, streak: 12, status: "active" },
-  { id: "u2", name: "তানভীর আহমেদ", email: "tanvir@gmail.com", class: "ক্লাস ৯", xp: 1180, streak: 9, status: "active" },
-  { id: "u3", name: "নুসরাত জাহান", email: "nusrat@gmail.com", class: "ক্লাস ৮", xp: 1105, streak: 8, status: "inactive" },
+// Preset Options for Banner Management
+const PRESET_BANNER_ROUTES = [
+  { label: "🎯 কুইজ সেটআপ (/quiz/setup)", value: "/quiz/setup" },
+  { label: "⚔️ ১v১ ফ্রেন্ড ব্যাটেল (/community)", value: "/community" },
+  { label: "🏆 লিডারবোর্ড (/leaderboard)", value: "/leaderboard" },
+  { label: "📊 অগ্রগতি ও স্ট্যাটস (/progress)", value: "/progress" },
+  { label: "🏠 ড্যাশবোর্ড (/dashboard)", value: "/dashboard" },
+  { label: "⚙️ প্রোফাইল ও সেটিংস (/settings)", value: "/settings" },
+  { label: "🔗 কাস্টম ইউআরএল (Custom Link)", value: "custom" },
 ];
 
-const fallbackSubjects: AdminSubject[] = [
-  { id: "s1", name: "বাংলা", slug: "bangla", classId: "class6", totalQuizzes: 12, totalStudents: 450, color: "#0D9488" },
-  { id: "s2", name: "English", slug: "english", classId: "class6", totalQuizzes: 8, totalStudents: 380, color: "#F87171" },
-  { id: "s3", name: "গণিত", slug: "math", classId: "class6", totalQuizzes: 15, totalStudents: 520, color: "#6366F1" },
-  { id: "s4", name: "বিজ্ঞান", slug: "science", classId: "class6", totalQuizzes: 10, totalStudents: 410, color: "#F59E0B" },
+const PRESET_BANNER_GRADIENTS = [
+  { label: "Teal Oceanic", value: "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)" },
+  { label: "Purple Nebula", value: "linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #D946EF 100%)" },
+  { label: "Sunset Flame", value: "linear-gradient(135deg, #D97706 0%, #EA580C 50%, #DC2626 100%)" },
+  { label: "Emerald Forest", value: "linear-gradient(135deg, #059669 0%, #10B981 50%, #047857 100%)" },
+  { label: "Midnight Dark", value: "linear-gradient(135deg, #1E293B 0%, #0F172A 50%, #334155 100%)" },
 ];
 
-const fallbackQuizzes: AdminQuiz[] = [
-  { id: "q1", name: "বাংলা ২য় পত্র - ব্যাকরণ", subject: "বাংলা", questionsCount: 20, attempts: 145, avgScore: "৭৮%", status: "published" },
-  { id: "q2", name: "Grammar Set 3", subject: "English", questionsCount: 15, attempts: 98, avgScore: "৬২%", status: "published" },
-  { id: "q3", name: "বীজগণিত অনুশীলন", subject: "গণিত", questionsCount: 25, attempts: 201, avgScore: "৮৪%", status: "draft" },
+const PRESET_BADGE_TAGS = [
+  "NEW FEATURE 🔥",
+  "PROMO ⚡",
+  "CHALLENGE 🏆",
+  "LIVE BATTLE ⚔️",
+  "UPDATE 📢",
 ];
-
-const fallbackQuestions: AdminQuestion[] = [
-  {
-    id: "q_sample_1",
-    questionText: "বাংলা ভাষার মূল উৎস কোনটি?",
-    options: ["বৈদিক ভাষা", "প্রাকৃত ভাষা", "সংস্কৃত ভাষা", "হিন্দি ভাষা"],
-    correctAnswer: 1,
-    explanation: "বাংলা ভাষার মূল উৎস প্রাকৃত ভাষা।",
-  },
-  {
-    id: "q_sample_2",
-    questionText: "বীজগণিতের জনক কে?",
-    options: ["আল খোয়ারিজমি", "আর্কিমিডিস", "ইউক্লিড", "পাইথাগোরাস"],
-    correctAnswer: 0,
-    explanation: "আল খোয়ারিজমিকে বীজগণিতের জনক বলা হয়।",
-  },
-];
-
-const weeklyData = [40, 65, 55, 80, 70, 90, 75];
-const weekDays = ["সো", "মঙ", "বু", "বৃ", "শু", "শ", "র"];
 
 export default function AdminPage() {
   const [activeNav, setActiveNav] = useState("dashboard");
@@ -140,16 +136,28 @@ export default function AdminPage() {
   const [chapters, setChapters] = useState<AdminChapter[]>([]);
   const [quizzes, setQuizzes] = useState<AdminQuiz[]>([]);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
+  const [banners, setBanners] = useState<BannerSlide[]>([]);
 
   // Modals & Toast State
   const [isAddQuizOpen, setIsAddQuizOpen] = useState(false);
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isAddBannerOpen, setIsAddBannerOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<BannerSlide | null>(null);
+  const [selectedBannerRoutePreset, setSelectedBannerRoutePreset] = useState<string>("/quiz/setup");
+  const [customBannerRouteUrl, setCustomBannerRouteUrl] = useState<string>("");
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<AdminQuestion | null>(null);
   const [editingSubject, setEditingSubject] = useState<AdminSubject | null>(null);
   const [selectedSubjectClassFilter, setSelectedSubjectClassFilter] = useState<string>("all");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Chapter Management State
+  const [allChapters, setAllChapters] = useState<AdminChapter[]>([]);
+  const [isAddChapterOpen, setIsAddChapterOpen] = useState(false);
+  const [editingChapter, setEditingChapter] = useState<AdminChapter | null>(null);
+  const [chapterSubjectFilter, setChapterSubjectFilter] = useState<string>("all");
+  const [newChapter, setNewChapter] = useState({ name: "", subjectId: "", chapterNo: 1 });
 
   // Form Cascading Select States for Quiz Creation
   const [selectedClassId, setSelectedClassId] = useState("class6");
@@ -159,10 +167,35 @@ export default function AdminPage() {
   const [newQuiz, setNewQuiz] = useState({ name: "", questionsCount: 10, status: "published" as const });
   const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "" });
   const [newUser, setNewUser] = useState({ name: "", email: "", class: "ক্লাস ৯" });
+  const [newBanner, setNewBanner] = useState({
+    title: "",
+    subtitle: "",
+    badge: "NEW FEATURE 🔥",
+    ctaText: "কুইজ শুরু করুন 🚀",
+    linkUrl: "/quiz/setup",
+    imageUrl: "",
+    bgGradient: "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)",
+  });
 
   // Bulk JSON State
   const [bulkJsonInput, setBulkJsonInput] = useState(sampleJsonTemplate);
   const [bulkMeta, setBulkMeta] = useState({ classId: "class6", subjectId: "bangla", chapterId: "", quizId: "" });
+
+  // Question Bank Filter & Add States
+  const [questionClassFilter, setQuestionClassFilter] = useState<string>("all");
+  const [questionSubjectFilter, setQuestionSubjectFilter] = useState<string>("all");
+  const [questionChapterFilter, setQuestionChapterFilter] = useState<string>("all");
+
+  const [isAddQuestionOpen, setIsAddQuestionOpen] = useState(false);
+  const [newQuestion, setNewQuestion] = useState({
+    classId: "class6",
+    subjectId: "",
+    chapterId: "",
+    questionText: "",
+    options: ["", "", "", ""],
+    correctAnswer: 0,
+    explanation: "",
+  });
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -174,25 +207,25 @@ export default function AdminPage() {
     async function loadData() {
       setLoading(true);
       try {
-        const [firestoreUsers, firestoreClasses, firestoreSubjects, firestoreQuizzes, firestoreQuestions] = await Promise.all([
+        const [firestoreUsers, firestoreClasses, firestoreSubjects, firestoreQuizzes, firestoreQuestions, firestoreBanners, firestoreChapters] = await Promise.all([
           getAllStudents(),
           getAllClasses(),
           getAllSubjects(),
           getAllQuizzes(),
           getAllQuestions(),
+          getAllBanners(),
+          getAllChapters(),
         ]);
 
-        setUsers(firestoreUsers.length > 0 ? firestoreUsers : fallbackUsers);
+        setUsers(firestoreUsers);
         setClasses(firestoreClasses);
-        setSubjects(firestoreSubjects.length > 0 ? firestoreSubjects : fallbackSubjects);
-        setQuizzes(firestoreQuizzes.length > 0 ? firestoreQuizzes : fallbackQuizzes);
-        setQuestions(firestoreQuestions.length > 0 ? firestoreQuestions : fallbackQuestions);
+        setSubjects(firestoreSubjects);
+        setQuizzes(firestoreQuizzes);
+        setQuestions(firestoreQuestions);
+        setBanners(firestoreBanners);
+        setAllChapters(firestoreChapters);
       } catch (err) {
         console.error("Error loading Firestore admin data:", err);
-        setUsers(fallbackUsers);
-        setSubjects(fallbackSubjects);
-        setQuizzes(fallbackQuizzes);
-        setQuestions(fallbackQuestions);
       } finally {
         setLoading(false);
       }
@@ -292,6 +325,47 @@ export default function AdminPage() {
     }
   };
 
+  const handleOpenAddQuestion = () => {
+    const defaultSub = subjects[0]?.id || "";
+    const defaultCh = allChapters.find((c) => c.subjectId === defaultSub)?.id || "";
+    setNewQuestion({
+      classId: subjects[0]?.classId || "class6",
+      subjectId: defaultSub,
+      chapterId: defaultCh,
+      questionText: "",
+      options: ["", "", "", ""],
+      correctAnswer: 0,
+      explanation: "",
+    });
+    setIsAddQuestionOpen(true);
+  };
+
+  const handleCreateQuestion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newQuestion.questionText.trim() || newQuestion.options.some((o) => !o.trim())) {
+      showToast("প্রশ্নের বিবরণ ও ৪টি অপশন পুরন করুন");
+      return;
+    }
+    try {
+      const payload = {
+        classId: newQuestion.classId,
+        subjectId: newQuestion.subjectId,
+        chapterId: newQuestion.chapterId,
+        questionText: newQuestion.questionText.trim(),
+        options: newQuestion.options.map((o) => o.trim()),
+        correctAnswer: newQuestion.correctAnswer,
+        explanation: newQuestion.explanation.trim(),
+      };
+      const id = await addQuestion(payload);
+      setQuestions([{ id, ...payload }, ...questions]);
+      setIsAddQuestionOpen(false);
+      showToast("নতুন প্রশ্ন সফলভাবে যোগ হয়েছে! 📝");
+    } catch (err) {
+      console.error("Error creating question:", err);
+      showToast("ত্রুটি: প্রশ্ন যোগ করা যায়নি");
+    }
+  };
+
   const handleBulkUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -304,7 +378,7 @@ export default function AdminPage() {
 
       // Refresh Questions List
       const updatedQ = await getAllQuestions();
-      setQuestions(updatedQ.length > 0 ? updatedQ : fallbackQuestions);
+      setQuestions(updatedQ);
     } catch (err: any) {
       showToast(`JSON ফরম্যাট ভুল: ${err.message}`);
     }
@@ -314,13 +388,17 @@ export default function AdminPage() {
     e.preventDefault();
     if (!editingQuestion) return;
     try {
-      await updateQuestion(editingQuestion.id, {
-        questionText: editingQuestion.questionText,
-        options: editingQuestion.options,
+      const payload = {
+        classId: editingQuestion.classId || "",
+        subjectId: editingQuestion.subjectId || "",
+        chapterId: editingQuestion.chapterId || "",
+        questionText: editingQuestion.questionText.trim(),
+        options: editingQuestion.options.map((o) => o.trim()),
         correctAnswer: editingQuestion.correctAnswer,
-        explanation: editingQuestion.explanation,
-      });
-      setQuestions(questions.map(q => q.id === editingQuestion.id ? editingQuestion : q));
+        explanation: editingQuestion.explanation?.trim() || "",
+      };
+      await updateQuestion(editingQuestion.id, payload);
+      setQuestions(questions.map((q) => (q.id === editingQuestion.id ? { ...editingQuestion, ...payload } : q)));
       setEditingQuestion(null);
       showToast("প্রশ্ন সফলভাবে এডিট হয়েছে! ✏️");
     } catch (err) {
@@ -331,7 +409,7 @@ export default function AdminPage() {
   const handleDeleteQuestion = async (id: string) => {
     try {
       await deleteQuestion(id);
-      setQuestions(questions.filter(q => q.id !== id));
+      setQuestions(questions.filter((q) => q.id !== id));
       showToast("প্রশ্ন মুছে ফেলা হয়েছে! 🗑️");
     } catch (err) {
       showToast("প্রশ্ন ডিলিট করা যায়নি");
@@ -468,19 +546,163 @@ export default function AdminPage() {
     }
   };
 
+  const handleOpenAddBanner = () => {
+    setEditingBanner(null);
+    setNewBanner({
+      title: "",
+      subtitle: "",
+      badge: "NEW FEATURE 🔥",
+      ctaText: "কুইজ শুরু করুন 🚀",
+      linkUrl: "/quiz/setup",
+      imageUrl: "",
+      bgGradient: "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)",
+    });
+    setSelectedBannerRoutePreset("/quiz/setup");
+    setCustomBannerRouteUrl("");
+    setIsAddBannerOpen(true);
+  };
+
+  const handleOpenEditBanner = (b: BannerSlide) => {
+    setEditingBanner(b);
+    setNewBanner({
+      title: b.title || "",
+      subtitle: b.subtitle || "",
+      badge: b.badge || "NEW FEATURE 🔥",
+      ctaText: b.ctaText || "কুইজ শুরু করুন 🚀",
+      linkUrl: b.linkUrl || "/quiz/setup",
+      imageUrl: b.imageUrl || "",
+      bgGradient: b.bgGradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)",
+    });
+
+    const isPreset = PRESET_BANNER_ROUTES.some((r) => r.value === b.linkUrl);
+    if (isPreset) {
+      setSelectedBannerRoutePreset(b.linkUrl || "/quiz/setup");
+      setCustomBannerRouteUrl("");
+    } else {
+      setSelectedBannerRoutePreset("custom");
+      setCustomBannerRouteUrl(b.linkUrl || "");
+    }
+    setIsAddBannerOpen(true);
+  };
+
+  const handleSaveBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBanner.title.trim()) return;
+
+    const finalLink =
+      selectedBannerRoutePreset === "custom"
+        ? customBannerRouteUrl.trim() || "/quiz/setup"
+        : selectedBannerRoutePreset;
+
+    const itemPayload = {
+      title: newBanner.title.trim(),
+      subtitle: newBanner.subtitle.trim(),
+      badge: newBanner.badge?.trim() || "NEW FEATURE 🔥",
+      ctaText: newBanner.ctaText?.trim() || "কুইজ শুরু করুন 🚀",
+      linkUrl: finalLink,
+      imageUrl: newBanner.imageUrl?.trim() || "",
+      bgGradient: newBanner.bgGradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)",
+    };
+
+    try {
+      if (editingBanner) {
+        await updateBannerDoc(editingBanner.id, itemPayload);
+        setBanners(
+          banners.map((b) => (b.id === editingBanner.id ? { ...b, ...itemPayload } : b))
+        );
+        showToast("ব্যানার ক্যারোজেল আপডেট হয়েছে! ✏️");
+      } else {
+        const itemWithOrder = { ...itemPayload, order: banners.length + 1 };
+        const id = await addBannerDoc(itemWithOrder);
+        setBanners([...banners, { ...itemWithOrder, id }]);
+        showToast("নতুন ব্যানার ক্যারোজেল যোগ হয়েছে! 🎨");
+      }
+      setIsAddBannerOpen(false);
+      setEditingBanner(null);
+    } catch (err) {
+      console.error("Error saving banner:", err);
+      showToast("ত্রুটি: ব্যানার সংরক্ষণ করা যায়নি");
+    }
+  };
+
+  const handleDeleteBanner = async (id: string) => {
+    try {
+      await deleteBannerDoc(id);
+      setBanners(banners.filter((b) => b.id !== id));
+      showToast("ব্যানার মুছে ফেলা হয়েছে! 🗑️");
+    } catch (err) {
+      showToast("ব্যানার ডিলিট করা যায়নি");
+    }
+  };
+
+  // ===== CHAPTER HANDLERS =====
+  const handleOpenAddChapter = (preSelectedSubjectId?: string) => {
+    setEditingChapter(null);
+    setNewChapter({ name: "", subjectId: preSelectedSubjectId || (subjects[0]?.id || ""), chapterNo: 1 });
+    setIsAddChapterOpen(true);
+  };
+
+  const handleOpenEditChapter = (ch: AdminChapter) => {
+    setEditingChapter(ch);
+    setNewChapter({ name: ch.name, subjectId: ch.subjectId, chapterNo: ch.chapterNo });
+    setIsAddChapterOpen(true);
+  };
+
+  const handleSaveChapter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChapter.name.trim() || !newChapter.subjectId) return;
+    try {
+      const payload = {
+        name: newChapter.name.trim(),
+        subjectId: newChapter.subjectId,
+        chapterNo: newChapter.chapterNo,
+        order: newChapter.chapterNo,
+      };
+      if (editingChapter) {
+        await updateChapter(editingChapter.id, payload);
+        setAllChapters(allChapters.map((c) => (c.id === editingChapter.id ? { ...c, ...payload } : c)));
+        showToast("অধ্যায় আপডেট হয়েছে! ✏️");
+      } else {
+        const id = await addChapter(payload);
+        setAllChapters([...allChapters, { ...payload, id }]);
+        showToast("নতুন অধ্যায় যোগ হয়েছে! 📚");
+      }
+      setIsAddChapterOpen(false);
+      setEditingChapter(null);
+    } catch (err) {
+      console.error("Error saving chapter:", err);
+      showToast("ত্রুটি: অধ্যায় সংরক্ষণ করা যায়নি");
+    }
+  };
+
+  const handleDeleteChapter = async (id: string) => {
+    try {
+      await deleteChapter(id);
+      setAllChapters(allChapters.filter((c) => c.id !== id));
+      showToast("অধ্যায় মুছে ফেলা হয়েছে! 🗑️");
+    } catch (err) {
+      showToast("অধ্যায় ডিলিট করা যায়নি");
+    }
+  };
+
   const navItems: NavItem[] = [
     { id: "dashboard", label: "ড্যাশবোর্ড", icon: LayoutDashboard },
+    { id: "banners", label: "ব্যানার ক্যারোজেল", icon: Layers, badge: String(banners.length), badgeColor: "bg-teal-100 text-teal-800" },
     { id: "quizzes", label: "কুইজ ম্যানেজমেন্ট", icon: ListChecks, badge: String(quizzes.length), badgeColor: "bg-amber-100 text-amber-800" },
     { id: "questions", label: "প্রশ্ন ব্যাংক (Questions)", icon: HelpCircle, badge: String(questions.length), badgeColor: "bg-teal-100 text-teal-800" },
-    { id: "subjects", label: "বিষয়সমূহ", icon: BookOpen },
+    { id: "subjects", label: "বিষয় ও অধ্যায়", icon: BookOpen, badge: String(subjects.length), badgeColor: "bg-indigo-100 text-indigo-800" },
     { id: "users", label: "ইউজারস", icon: Users, badge: String(users.length), badgeColor: "bg-indigo-100 text-indigo-800" },
     { id: "analytics", label: "অ্যানালিটিক্স", icon: BarChart3 },
     { id: "settings", label: "সেটিংস", icon: Settings },
   ];
 
-  const filteredQuestions = searchQuery
-    ? questions.filter(q => q.questionText.toLowerCase().includes(searchQuery.toLowerCase()))
-    : questions;
+  const filteredQuestions = questions.filter((q) => {
+    if (questionClassFilter !== "all" && q.classId !== questionClassFilter) return false;
+    if (questionSubjectFilter !== "all" && q.subjectId !== questionSubjectFilter) return false;
+    if (questionChapterFilter !== "all" && q.chapterId !== questionChapterFilter) return false;
+    if (searchQuery && !q.questionText.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <div className="h-screen bg-slate-950 font-sans flex overflow-hidden text-white relative">
@@ -564,14 +786,13 @@ export default function AdminPage() {
               <Search width={13} height={13} className="absolute left-2.5 text-slate-500" />
               <input
                 type="text"
-                placeholder="প্রশ্ন বা বিষয় খুঁজুন..."
+                placeholder="প্রশ্ন বা বিষয় খুঁজুন..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-7 pr-3 py-1.5 text-[11px] bg-slate-800 border border-slate-700 rounded-lg text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50 w-44 transition-all"
               />
             </div>
 
-            {/* BULK JSON UPLOAD BUTTON */}
             <button
               onClick={() => setIsBulkUploadOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[11px] font-extrabold transition-all shadow-lg shadow-purple-600/20"
@@ -584,12 +805,13 @@ export default function AdminPage() {
               onClick={() => {
                 if (activeNav === "subjects") setIsAddSubjectOpen(true);
                 else if (activeNav === "users") setIsAddUserOpen(true);
+                else if (activeNav === "banners") handleOpenAddBanner();
                 else setIsAddQuizOpen(true);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 rounded-lg text-white text-[11px] font-extrabold transition-all shadow-lg shadow-teal-600/20"
             >
               <Plus width={13} height={13} />
-              নতুন কুইজ
+              নতুন যোগ করুন
             </button>
           </div>
         </header>
@@ -607,19 +829,15 @@ export default function AdminPage() {
                 <>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     {[
-                      { label: "মোট ইউজার", value: String(users.length), change: "+১২%", up: true, icon: Users, color: "#0D9488", bg: "#E6F4F1" },
-                      { label: "মোট কুইজ", value: String(quizzes.length), change: "+৮%", up: true, icon: ListChecks, color: "#6366F1", bg: "#EEF2FF" },
-                      { label: "মোট প্রশ্ন", value: String(questions.length), change: "+৩৪%", up: true, icon: HelpCircle, color: "#A855F7", bg: "#F3E8FF" },
-                      { label: "মোট বিষয়", value: String(subjects.length), change: "+২৩%", up: true, icon: BookOpen, color: "#F59E0B", bg: "#FFFBEB" },
+                      { label: "মোট ইউজার", value: String(users.length), icon: Users, color: "#0D9488", bg: "#E6F4F1" },
+                      { label: "মোট কুইজ", value: String(quizzes.length), icon: ListChecks, color: "#6366F1", bg: "#EEF2FF" },
+                      { label: "মোট প্রশ্ন", value: String(questions.length), icon: HelpCircle, color: "#A855F7", bg: "#F3E8FF" },
+                      { label: "মোট বিষয়", value: String(subjects.length), icon: BookOpen, color: "#F59E0B", bg: "#FFFBEB" },
                     ].map((s) => (
                       <div key={s.label} className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 shadow-md">
                         <div className="flex items-start justify-between mb-3">
                           <div className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: s.bg }}>
                             <s.icon width={17} height={17} style={{ color: s.color }} />
-                          </div>
-                          <div className={`flex items-center gap-0.5 text-[10px] font-extrabold ${s.up ? "text-emerald-400" : "text-rose-400"}`}>
-                            {s.up ? <ArrowUpRight width={12} height={12} /> : <ArrowDownRight width={12} height={12} />}
-                            {s.change}
                           </div>
                         </div>
                         <p className="text-xl font-black text-white leading-none">{s.value}</p>
@@ -635,30 +853,35 @@ export default function AdminPage() {
                           <p className="text-sm font-extrabold text-white">সাপ্তাহিক অ্যাক্টিভিটি</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">কুইজ অ্যাটেম্পট · এই সপ্তাহ</p>
                         </div>
-                        <span className="text-[10px] font-extrabold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full border border-emerald-400/20">+২৩% ↑</span>
                       </div>
-                      <div className="flex items-end justify-between gap-2 h-28">
-                        {weeklyData.map((h, i) => (
-                          <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                            <div className="w-full rounded-t-lg" style={{ height: `${h}%`, background: i === 5 ? "linear-gradient(180deg,#0D9488,#047857)" : "rgba(255,255,255,0.07)" }} />
-                            <span className="text-[9px] font-bold text-slate-500">{weekDays[i]}</span>
-                          </div>
-                        ))}
-                      </div>
+                      {questions.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-28 text-slate-600 gap-2">
+                          <HelpCircle width={28} height={28} />
+                          <p className="text-xs font-bold">প্রশ্ন যোগ হলে chart দেখা যাবে</p>
+                        </div>
+                      ) : (
+                        <div className="flex items-end justify-between gap-2 h-28">
+                          {["সো", "মঙ", "বু", "বৃ", "শু", "শ", "র"].map((day, i) => (
+                            <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                              <div className="w-full rounded-t-lg" style={{ height: `${(i + 1) * 12}%`, background: "rgba(255,255,255,0.07)" }} />
+                              <span className="text-[9px] font-bold text-slate-500">{day}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-2xl bg-slate-900 border border-slate-800/80 p-4 flex flex-col gap-3">
                       <p className="text-sm font-extrabold text-white">লাইভ স্ট্যাটস</p>
                       {[
-                        { label: "এখন অনলাইন", value: "৩৪৭", icon: Circle, color: "text-emerald-400 fill-emerald-400", pulse: true },
-                        { label: "আজ নতুন ইউজার", value: `+${users.length}`, icon: Users, color: "text-teal-400" },
+                        { label: "মোট শিক্ষার্থী", value: String(users.length), icon: Users, color: "text-teal-400" },
                         { label: "মোট প্রশ্ন সংখ্যা", value: String(questions.length), icon: HelpCircle, color: "text-purple-400" },
-                        { label: "গড় সেশন", value: "১৮ মি.", icon: Activity, color: "text-indigo-400" },
-                        { label: "টপ স্ট্রিক", value: "২৪ দিন", icon: Flame, color: "text-orange-400" },
+                        { label: "মোট বিষয়", value: String(subjects.length), icon: BookOpen, color: "text-amber-400" },
+                        { label: "মোট ব্যানার", value: String(banners.length), icon: Layers, color: "text-indigo-400" },
                       ].map((item) => (
                         <div key={item.label} className="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0">
                           <div className="flex items-center gap-2">
-                            <item.icon width={13} height={13} className={item.color + (item.pulse ? " animate-pulse" : "")} />
+                            <item.icon width={13} height={13} className={item.color} />
                             <span className="text-[11px] text-slate-400 font-medium">{item.label}</span>
                           </div>
                           <span className="text-xs font-black text-white">{item.value}</span>
@@ -669,78 +892,263 @@ export default function AdminPage() {
                 </>
               )}
 
-              {/* QUESTIONS BANK TAB (NEW SECTION) */}
-              {activeNav === "questions" && (
+              {/* BANNERS MANAGEMENT TAB */}
+              {activeNav === "banners" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-base font-extrabold text-white flex items-center gap-2">
-                        <HelpCircle width={18} height={18} className="text-purple-400" />
-                        প্রশ্ন ব্যাংক ও এডিটর ({questions.length}টি প্রশ্ন)
+                        <Layers width={18} height={18} className="text-teal-400" />
+                        ব্যানার ক্যারোজেল ম্যানেজমেন্ট ({banners.length}টি ব্যানার)
                       </h2>
-                      <p className="text-[10px] text-slate-500">সব যুক্ত করা প্রশ্ন দেখুন, এডিট বা ডিলিট করুন</p>
+                      <p className="text-[10px] text-slate-500">ইউজারের ড্যাশবোর্ডে স্লাইডার হিসেবে নতুন ফিচার ও আপডেট প্রমোট করুন</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleOpenAddBanner}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-all shadow"
+                    >
+                      <Plus width={13} height={13} /> নতুন ব্যানার যোগ করুন
+                    </button>
+                  </div>
+
+                  {banners.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl bg-slate-900 border border-slate-800 border-dashed">
+                      <div className="h-14 w-14 rounded-2xl bg-slate-800 flex items-center justify-center">
+                        <Layers width={24} height={24} className="text-slate-600" />
+                      </div>
+                      <p className="text-sm font-bold text-slate-400">এখনো কোনো ব্যানার নেই</p>
+                      <p className="text-[11px] text-slate-600 text-center max-w-xs">"নতুন ব্যানার যোগ করুন" বাটনে ক্লিক করে প্রথম স্লাইড তৈরি করুন</p>
+                      <button onClick={handleOpenAddBanner} className="mt-2 px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-500 transition-all flex items-center gap-1.5">
+                        <Plus width={13} height={13} /> প্রথম ব্যানার যোগ করুন
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {banners.map((b, idx) => (
+                        <div
+                          key={b.id}
+                          className="rounded-2xl p-4 relative overflow-hidden border border-slate-800 bg-slate-900 flex flex-col justify-between space-y-3 min-h-[140px]"
+                          style={{ background: b.bgGradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)" }}
+                        >
+                          <div className="flex items-center justify-between relative z-10">
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-black/40 text-white border border-white/20">
+                              #{idx + 1} · {b.badge || "PROMO"}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleOpenEditBanner(b)}
+                                className="h-7 w-7 rounded-lg bg-black/40 text-amber-300 hover:bg-amber-500 hover:text-slate-900 flex items-center justify-center transition-all border border-white/20"
+                                title="সম্পাদনা করুন"
+                              >
+                                <Edit3 width={13} height={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteBanner(b.id)}
+                                className="h-7 w-7 rounded-lg bg-black/40 text-rose-300 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all border border-white/20"
+                                title="মুছে ফেলুন"
+                              >
+                                <Trash2 width={13} height={13} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="relative z-10">
+                            <h3 className="text-lg font-black text-white leading-tight">{b.title}</h3>
+                            <p className="text-xs text-white/80 font-medium mt-1 line-clamp-2">{b.subtitle}</p>
+                          </div>
+
+                          <div className="flex items-center justify-between relative z-10 pt-2 border-t border-white/10">
+                            <span className="text-[10px] font-extrabold text-amber-200 bg-black/30 px-2 py-0.5 rounded-md border border-white/10">
+                              CTA: {b.ctaText || "এক্সপ্লোর করুন"}
+                            </span>
+                            <span className="text-[9px] text-white/60 font-mono">Link: {b.linkUrl}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* QUESTIONS BANK TAB (UPGRADED CHAPTER-WISE SECTION) */}
+              {activeNav === "questions" && (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+                        <HelpCircle width={18} height={18} className="text-purple-400" />
+                        প্রশ্ন ব্যাংক ও ম্যানুয়াল এডিটর ({questions.length}টি প্রশ্ন)
+                      </h2>
+                      <p className="text-[10px] text-slate-500">বিষয় ও অধ্যায়ভিত্তিক প্রশ্ন সংরক্ষণ, ম্যানুয়াল সম্পাদনা ও Bulk JSON আপলোড</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={handleOpenAddQuestion}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-extrabold transition-all shadow"
+                      >
+                        <Plus width={13} height={13} /> ১টি প্রশ্ন যোগ করুন
+                      </button>
+
                       <button
                         onClick={() => setIsBulkUploadOpen(true)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-extrabold transition-all shadow"
                       >
-                        <Upload width={12} height={12} /> Bulk JSON Upload
+                        <Upload width={13} height={13} /> Bulk JSON Upload
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3">
-                    {filteredQuestions.map((q, idx) => (
-                      <div key={q.id || idx} className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 space-y-3 relative group hover:border-slate-700 transition-all">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="h-6 w-6 rounded-lg bg-purple-900/60 text-purple-300 font-black text-xs flex items-center justify-center border border-purple-500/20">
-                              {idx + 1}
-                            </span>
-                            <h3 className="text-sm font-extrabold text-white">{q.questionText}</h3>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => setEditingQuestion(q)}
-                              className="h-7 px-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold flex items-center gap-1 hover:bg-amber-500/20 transition-all"
-                            >
-                              <Edit3 width={12} height={12} /> এডিট
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuestion(q.id)}
-                              className="h-7 w-7 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center hover:bg-rose-500/20 transition-all"
-                            >
-                              <Trash2 width={12} height={12} />
-                            </button>
-                          </div>
-                        </div>
+                  {/* CHAPTER-WISE MULTI-LEVEL FILTER CONTROLS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-900 p-3 rounded-2xl border border-slate-800">
+                    {/* Class Filter */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">১. ক্লাস ফিল্টার:</label>
+                      <select
+                        value={questionClassFilter}
+                        onChange={(e) => {
+                          setQuestionClassFilter(e.target.value);
+                          setQuestionSubjectFilter("all");
+                          setQuestionChapterFilter("all");
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-teal-400 font-bold focus:outline-none"
+                      >
+                        <option value="all">সকল ক্লাস</option>
+                        {classes.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                        {/* Options Grid */}
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          {q.options.map((opt, oIdx) => (
-                            <div
-                              key={oIdx}
-                              className={`p-2 rounded-xl border flex items-center justify-between ${
-                                oIdx === q.correctAnswer
-                                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold"
-                                  : "bg-slate-800/60 border-slate-700/60 text-slate-300"
-                              }`}
-                            >
-                              <span>{opt}</span>
-                              {oIdx === q.correctAnswer && <Check width={14} height={14} className="text-emerald-400" />}
-                            </div>
-                          ))}
-                        </div>
+                    {/* Subject Filter */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">২. বিষয় ফিল্টার:</label>
+                      <select
+                        value={questionSubjectFilter}
+                        onChange={(e) => {
+                          setQuestionSubjectFilter(e.target.value);
+                          setQuestionChapterFilter("all");
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold focus:outline-none"
+                      >
+                        <option value="all">সকল বিষয়</option>
+                        {(questionClassFilter === "all"
+                          ? subjects
+                          : subjects.filter((s) => s.classId === questionClassFilter)
+                        ).map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                        {q.explanation && (
-                          <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
-                            💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                    {/* Chapter Filter */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">৩. অধ্যায় ফিল্টার:</label>
+                      <select
+                        value={questionChapterFilter}
+                        onChange={(e) => setQuestionChapterFilter(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-amber-400 font-bold focus:outline-none"
+                      >
+                        <option value="all">সকল অধ্যায়</option>
+                        {(questionSubjectFilter === "all"
+                          ? allChapters
+                          : allChapters.filter((c) => c.subjectId === questionSubjectFilter)
+                        ).map((ch) => (
+                          <option key={ch.id} value={ch.id}>অধ্যায় {ch.chapterNo}: {ch.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
+
+                  {filteredQuestions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl bg-slate-900 border border-slate-800 border-dashed">
+                      <HelpCircle width={28} height={28} className="text-slate-600" />
+                      <p className="text-sm font-bold text-slate-400">ফিল্টারের সাথে কোনো প্রশ্ন পাওয়া যায়নি</p>
+                      <button onClick={handleOpenAddQuestion} className="px-4 py-2 bg-teal-600 text-white text-xs font-bold rounded-xl hover:bg-teal-500 transition-all flex items-center gap-1.5">
+                        <Plus width={13} height={13} /> প্রথম প্রশ্ন যোগ করুন
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {filteredQuestions.map((q, idx) => {
+                        const sub = subjects.find((s) => s.id === q.subjectId);
+                        const ch = allChapters.find((c) => c.id === q.chapterId);
+                        const clsName = classes.find((c) => c.id === q.classId)?.name;
+
+                        return (
+                          <div key={q.id || idx} className="rounded-2xl p-4 bg-slate-900 border border-slate-800/80 space-y-3 relative group hover:border-slate-700 transition-all">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="h-6 w-6 rounded-lg bg-purple-900/60 text-purple-300 font-black text-xs flex items-center justify-center border border-purple-500/20">
+                                    {idx + 1}
+                                  </span>
+
+                                  {clsName && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-teal-300 border border-teal-500/20">
+                                      {clsName}
+                                    </span>
+                                  )}
+
+                                  {sub && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-500/20">
+                                      {sub.name}
+                                    </span>
+                                  )}
+
+                                  {ch && (
+                                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-500/20">
+                                      অধ্যায় {ch.chapterNo}: {ch.name}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h3 className="text-sm font-extrabold text-white leading-snug">{q.questionText}</h3>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => setEditingQuestion(q)}
+                                  className="h-7 px-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold flex items-center gap-1 hover:bg-amber-500/20 transition-all"
+                                >
+                                  <Edit3 width={12} height={12} /> এডিট
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteQuestion(q.id)}
+                                  className="h-7 w-7 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center hover:bg-rose-500/20 transition-all"
+                                >
+                                  <Trash2 width={12} height={12} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Options Grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                              {q.options.map((opt, oIdx) => (
+                                <div
+                                  key={oIdx}
+                                  className={`p-2 rounded-xl border flex items-center justify-between ${
+                                    oIdx === q.correctAnswer
+                                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold"
+                                      : "bg-slate-800/60 border-slate-700/60 text-slate-300"
+                                  }`}
+                                >
+                                  <span>{opt}</span>
+                                  {oIdx === q.correctAnswer && <Check width={14} height={14} className="text-emerald-400" />}
+                                </div>
+                              ))}
+                            </div>
+
+                            {q.explanation && (
+                              <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+                                💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -882,6 +1290,134 @@ export default function AdminPage() {
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* ── CHAPTER MANAGEMENT SECTION ── */}
+                  <div className="mt-6 pt-5 border-t border-slate-800">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <div>
+                        <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+                          <FileCode width={18} height={18} className="text-amber-400" />
+                          অধ্যায় ম্যানেজমেন্ট ({allChapters.length}টি অধ্যায়)
+                        </h2>
+                        <p className="text-[10px] text-slate-500">নির্দিষ্ট বিষয়ের আন্ডারে অধ্যায় তৈরি, সম্পাদনা এবং মুছুন</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1">
+                          <span className="text-[11px] font-bold text-slate-400">বিষয়:</span>
+                          <select
+                            value={chapterSubjectFilter}
+                            onChange={(e) => setChapterSubjectFilter(e.target.value)}
+                            className="bg-transparent text-xs font-bold text-amber-400 focus:outline-none cursor-pointer max-w-[180px]"
+                          >
+                            <option value="all" className="bg-slate-900 text-white">সকল বিষয় ({allChapters.length})</option>
+                            {subjects.map((s) => {
+                              const count = allChapters.filter((c) => c.subjectId === s.id).length;
+                              return (
+                                <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                                  {s.name} ({count})
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                        <button
+                          onClick={() => handleOpenAddChapter(chapterSubjectFilter !== "all" ? chapterSubjectFilter : undefined)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                        >
+                          <Plus width={13} height={13} /> নতুন অধ্যায় যোগ করুন
+                        </button>
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const filteredChapters = chapterSubjectFilter === "all"
+                        ? allChapters
+                        : allChapters.filter((c) => c.subjectId === chapterSubjectFilter);
+
+                      if (filteredChapters.length === 0) {
+                        return (
+                          <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-2xl bg-slate-900 border border-slate-800 border-dashed">
+                            <div className="h-12 w-12 rounded-2xl bg-slate-800 flex items-center justify-center">
+                              <FileCode width={22} height={22} className="text-slate-600" />
+                            </div>
+                            <p className="text-sm font-bold text-slate-400">
+                              {chapterSubjectFilter === "all" ? "এখনো কোনো অধ্যায় নেই" : "এই বিষয়ে কোনো অধ্যায় নেই"}
+                            </p>
+                            <button
+                              onClick={() => handleOpenAddChapter(chapterSubjectFilter !== "all" ? chapterSubjectFilter : undefined)}
+                              className="mt-1 px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl hover:bg-amber-500 transition-all flex items-center gap-1.5"
+                            >
+                              <Plus width={13} height={13} /> প্রথম অধ্যায় যোগ করুন
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      // Group chapters by subject
+                      const groupedBySubject: Record<string, AdminChapter[]> = {};
+                      filteredChapters.forEach((ch) => {
+                        if (!groupedBySubject[ch.subjectId]) groupedBySubject[ch.subjectId] = [];
+                        groupedBySubject[ch.subjectId].push(ch);
+                      });
+
+                      return (
+                        <div className="space-y-4">
+                          {Object.entries(groupedBySubject).map(([subId, chaps]) => {
+                            const sub = subjects.find((s) => s.id === subId);
+                            const sortedChaps = [...chaps].sort((a, b) => a.chapterNo - b.chapterNo);
+                            return (
+                              <div key={subId} className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden">
+                                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/50 border-b border-slate-800">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-3 w-3 rounded-full" style={{ background: sub?.color || "#0D9488" }} />
+                                    <span className="text-xs font-extrabold text-white">{sub?.name || subId}</span>
+                                    <span className="text-[9px] font-bold text-slate-500">({sortedChaps.length}টি অধ্যায়)</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleOpenAddChapter(subId)}
+                                    className="flex items-center gap-1 text-[10px] font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg hover:bg-amber-500/20 transition-all"
+                                  >
+                                    <Plus width={10} height={10} /> অধ্যায় যোগ
+                                  </button>
+                                </div>
+                                <div className="divide-y divide-slate-800/60">
+                                  {sortedChaps.map((ch) => (
+                                    <div key={ch.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/40 transition-colors group">
+                                      <div className="flex items-center gap-3">
+                                        <span className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-400 text-[11px] font-black flex items-center justify-center border border-amber-500/20">
+                                          {ch.chapterNo}
+                                        </span>
+                                        <div>
+                                          <p className="text-xs font-bold text-white">{ch.name}</p>
+                                          <p className="text-[9px] text-slate-500 font-mono">ID: {ch.id}</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                          onClick={() => handleOpenEditChapter(ch)}
+                                          className="h-6 w-6 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center hover:bg-amber-500 transition-all"
+                                          title="সম্পাদনা"
+                                        >
+                                          <Edit3 width={11} height={11} />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteChapter(ch.id)}
+                                          className="h-6 w-6 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center justify-center hover:bg-rose-500 transition-all"
+                                          title="মুছুন"
+                                        >
+                                          <Trash2 width={11} height={11} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -1063,32 +1599,64 @@ export default function AdminPage() {
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                 <Upload width={16} height={16} className="text-purple-400" />
-                JSON Bulk Question Upload
+                অধ্যায়ভিত্তিক JSON Bulk Question Upload
               </h3>
               <button onClick={() => setIsBulkUploadOpen(false)} className="text-slate-400 hover:text-white">
                 <X width={16} height={16} />
               </button>
             </div>
+
             <form onSubmit={handleBulkUpload} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
+                {/* Class Select */}
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">ক্লাস (Class)</label>
+                  <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class)</label>
                   <select
                     value={bulkMeta.classId}
-                    onChange={(e) => setBulkMeta({ ...bulkMeta, classId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                    onChange={(e) => {
+                      const newCls = e.target.value;
+                      const subForCls = subjects.find((s) => s.classId === newCls)?.id || subjects[0]?.id || "";
+                      const chForSub = allChapters.find((c) => c.subjectId === subForCls)?.id || "";
+                      setBulkMeta({ ...bulkMeta, classId: newCls, subjectId: subForCls, chapterId: chForSub });
+                    }}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
                   >
-                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
+
+                {/* Subject Select */}
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">বিষয় (Subject)</label>
+                  <label className="block text-slate-400 font-bold mb-1">২. বিষয় (Subject)</label>
                   <select
                     value={bulkMeta.subjectId}
-                    onChange={(e) => setBulkMeta({ ...bulkMeta, subjectId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                    onChange={(e) => {
+                      const newSub = e.target.value;
+                      const chForSub = allChapters.find((c) => c.subjectId === newSub)?.id || "";
+                      setBulkMeta({ ...bulkMeta, subjectId: newSub, chapterId: chForSub });
+                    }}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
                   >
-                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Chapter Select (Requested Feature) */}
+                <div>
+                  <label className="block text-amber-400 font-extrabold mb-1">৩. অধ্যায় (Chapter)</label>
+                  <select
+                    value={bulkMeta.chapterId}
+                    onChange={(e) => setBulkMeta({ ...bulkMeta, chapterId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    <option value="">অধ্যায় সিলেক্ট করুন (অপশনাল)</option>
+                    {allChapters
+                      .filter((c) => !bulkMeta.subjectId || c.subjectId === bulkMeta.subjectId)
+                      .map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          অধ্যায় {ch.chapterNo}: {ch.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -1096,13 +1664,19 @@ export default function AdminPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-slate-400 font-bold">JSON অ্যারেকে এখানে পেস্ট করুন:</label>
-                  <span className="text-[10px] text-purple-400 font-mono">Format: [{`{ questionText, options, correctAnswer, explanation }`}]</span>
+                  <button
+                    type="button"
+                    onClick={() => setBulkJsonInput(sampleJsonTemplate)}
+                    className="text-[10px] text-purple-400 underline hover:text-purple-300"
+                  >
+                    নমুনা JSON টেমপ্লেট বসান
+                  </button>
                 </div>
                 <textarea
                   rows={8}
                   value={bulkJsonInput}
                   onChange={(e) => setBulkJsonInput(e.target.value)}
-                  className="w-full font-mono text-[11px] p-3 bg-slate-950 border border-slate-800 rounded-xl text-emerald-400 focus:outline-none focus:border-purple-500"
+                  className="w-full font-mono text-[11px] p-3 bg-slate-955 border border-slate-800 rounded-xl text-emerald-400 focus:outline-none focus:border-purple-500"
                 />
               </div>
 
@@ -1117,20 +1691,188 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ===== MODAL: SINGLE QUESTION ADD (NEW FEATURE) ===== */}
+      {isAddQuestionOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-4 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <Plus width={16} height={16} className="text-teal-400" />
+                নতুন প্রশ্ন ম্যানুয়ালি যোগ করুন
+              </h3>
+              <button onClick={() => setIsAddQuestionOpen(false)} className="text-slate-400 hover:text-white">
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuestion} className="space-y-3 text-xs">
+              <div className="grid grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">ক্লাস</label>
+                  <select
+                    value={newQuestion.classId}
+                    onChange={(e) => {
+                      const newCls = e.target.value;
+                      const subForCls = subjects.find((s) => s.classId === newCls)?.id || subjects[0]?.id || "";
+                      const chForSub = allChapters.find((c) => c.subjectId === subForCls)?.id || "";
+                      setNewQuestion({ ...newQuestion, classId: newCls, subjectId: subForCls, chapterId: chForSub });
+                    }}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">বিষয়</label>
+                  <select
+                    value={newQuestion.subjectId}
+                    onChange={(e) => {
+                      const newSub = e.target.value;
+                      const chForSub = allChapters.find((c) => c.subjectId === newSub)?.id || "";
+                      setNewQuestion({ ...newQuestion, subjectId: newSub, chapterId: chForSub });
+                    }}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-amber-400 font-extrabold mb-1">অধ্যায়</label>
+                  <select
+                    value={newQuestion.chapterId}
+                    onChange={(e) => setNewQuestion({ ...newQuestion, chapterId: e.target.value })}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    <option value="">অধ্যায় নির্বাচন করুন</option>
+                    {allChapters
+                      .filter((c) => !newQuestion.subjectId || c.subjectId === newQuestion.subjectId)
+                      .map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          অধ্যায় {ch.chapterNo}: {ch.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">প্রশ্ন (Question Text) <span className="text-rose-400">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: ফটোসিন্থেসিস প্রক্রিয়ায় উদ্ভিদ কোন গ্যাস গ্রহণ করে?"
+                  value={newQuestion.questionText}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, questionText: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-slate-400 font-bold">৪টি অপশন ইনপুট দিন ও সঠিক উত্তর সিলেক্ট করুন:</label>
+                {newQuestion.options.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="newCorrectOption"
+                      checked={newQuestion.correctAnswer === i}
+                      onChange={() => setNewQuestion({ ...newQuestion, correctAnswer: i })}
+                      className="accent-emerald-500"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder={`অপশন ${i + 1}`}
+                      value={opt}
+                      onChange={(e) => {
+                        const newOpts = [...newQuestion.options];
+                        newOpts[i] = e.target.value;
+                        setNewQuestion({ ...newQuestion, options: newOpts });
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">ব্যাখ্যা (Explanation)</label>
+                <input
+                  type="text"
+                  placeholder="যেমন: কার্বন ডাই অক্সাইড গ্যাস উদ্ভিদের শর্করা তৈরিতে ব্যবহৃত হয়।"
+                  value={newQuestion.explanation}
+                  onChange={(e) => setNewQuestion({ ...newQuestion, explanation: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                <button type="button" onClick={() => setIsAddQuestionOpen(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold shadow-lg">Firebase-এ সেভ করুন</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL: EDIT QUESTION ===== */}
       {editingQuestion && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-4 shadow-2xl my-8">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                 <Edit3 width={16} height={16} className="text-amber-400" />
-                প্রশ্ন এডিটর (Edit Question)
+                প্রশ্ন ম্যানুয়ালি এডিটর (Edit Question)
               </h3>
               <button onClick={() => setEditingQuestion(null)} className="text-slate-400 hover:text-white">
                 <X width={16} height={16} />
               </button>
             </div>
+
             <form onSubmit={handleUpdateQuestion} className="space-y-3 text-xs">
+              <div className="grid grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">ক্লাস</label>
+                  <select
+                    value={editingQuestion.classId || "class6"}
+                    onChange={(e) => setEditingQuestion({ ...editingQuestion, classId: e.target.value })}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">বিষয়</label>
+                  <select
+                    value={editingQuestion.subjectId || ""}
+                    onChange={(e) => setEditingQuestion({ ...editingQuestion, subjectId: e.target.value })}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-amber-400 font-extrabold mb-1">অধ্যায়</label>
+                  <select
+                    value={editingQuestion.chapterId || ""}
+                    onChange={(e) => setEditingQuestion({ ...editingQuestion, chapterId: e.target.value })}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    <option value="">অধ্যায় সিলেক্ট করুন</option>
+                    {allChapters
+                      .filter((c) => !editingQuestion.subjectId || c.subjectId === editingQuestion.subjectId)
+                      .map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          অধ্যায় {ch.chapterNo}: {ch.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-400 font-bold mb-1">প্রশ্ন (Question Text)</label>
                 <input
@@ -1138,7 +1880,7 @@ export default function AdminPage() {
                   required
                   value={editingQuestion.questionText}
                   onChange={(e) => setEditingQuestion({ ...editingQuestion, questionText: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
                 />
               </div>
 
@@ -1177,7 +1919,7 @@ export default function AdminPage() {
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
                 <button type="button" onClick={() => setEditingQuestion(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
                 <button type="submit" className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold shadow-lg">পরিবর্তন সেভ করুন</button>
               </div>
@@ -1487,6 +2229,285 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* ADD / EDIT BANNER MODAL */}
+      {isAddBannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-4 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <Layers width={16} height={16} className="text-teal-400" />
+                {editingBanner ? "ব্যানার ক্যারোজেল স্লাইড সম্পাদনা করুন" : "নতুন ব্যানার ক্যারোজেল স্লাইড যোগ করুন"}
+              </h3>
+              <button onClick={() => setIsAddBannerOpen(false)} className="text-slate-400 hover:text-white">
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBanner} className="space-y-4 text-xs">
+              {/* LIVE PREVIEW BOX */}
+              <div>
+                <label className="block text-[11px] text-teal-400 font-bold mb-1.5 flex items-center justify-between">
+                  <span>🎨 লাইভ প্রিভিউ (স্লাইডার কেমন দেখাবে)</span>
+                </label>
+                <div
+                  className="rounded-xl p-3.5 relative overflow-hidden border border-white/10 flex flex-col justify-between space-y-2 shadow-lg"
+                  style={{ background: newBanner.bgGradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)" }}
+                >
+                  <div className="flex items-center justify-between relative z-10">
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-black/40 text-white border border-white/20">
+                      {newBanner.badge || "NEW FEATURE 🔥"}
+                    </span>
+                  </div>
+
+                  <div className="relative z-10">
+                    <h4 className="text-base font-black text-white leading-tight">
+                      {newBanner.title || "এখানে ব্যানার শিরোনাম থাকবে"}
+                    </h4>
+                    <p className="text-[11px] text-white/80 font-medium mt-0.5 line-clamp-2">
+                      {newBanner.subtitle || "এখানে ব্যানার সাবটাইটেল বা বিস্তারিত বিবরণ থাকবে"}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between relative z-10 pt-1.5 border-t border-white/10">
+                    <span className="text-[10px] font-extrabold text-slate-900 bg-white px-2.5 py-1 rounded-lg shadow">
+                      {newBanner.ctaText || "কুইজ শুরু করুন 🚀"}
+                    </span>
+                    <span className="text-[9px] text-white/70 font-mono">
+                      Target: {selectedBannerRoutePreset === "custom" ? (customBannerRouteUrl || "/") : selectedBannerRoutePreset}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Title Input */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">১. শিরোনাম (Title) <span className="text-rose-400">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: ১v১ লাইভ ফ্রেন্ড ব্যাটেল"
+                  value={newBanner.title}
+                  onChange={(e) => setNewBanner({ ...newBanner, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500 font-bold"
+                />
+              </div>
+
+              {/* Subtitle Input */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">২. সংক্ষিপ্ত বিবরণ (Subtitle) <span className="text-rose-400">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: বন্ধুদের সাথে সরাসরি রিয়েল-টাইম কুইজ যুদ্ধ করো!"
+                  value={newBanner.subtitle}
+                  onChange={(e) => setNewBanner({ ...newBanner, subtitle: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              {/* Redirect Page Dropdown (Requested Feature) */}
+              <div className="p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl space-y-2">
+                <label className="block text-teal-300 font-extrabold mb-1">
+                  ৩. নেভিগেশন / রিডাইরেক্ট পেজ সিলেক্ট করুন (Destination Page)
+                </label>
+                <select
+                  value={selectedBannerRoutePreset}
+                  onChange={(e) => setSelectedBannerRoutePreset(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-teal-500/50 rounded-xl text-white font-bold focus:outline-none focus:border-teal-400"
+                >
+                  {PRESET_BANNER_ROUTES.map((route) => (
+                    <option key={route.value} value={route.value}>
+                      {route.label}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedBannerRoutePreset === "custom" && (
+                  <div className="pt-1">
+                    <label className="block text-slate-400 text-[10px] font-bold mb-1">কাস্টম URL লিখুন (e.g. /subject/maths বা https://...)</label>
+                    <input
+                      type="text"
+                      placeholder="/subject/physics"
+                      value={customBannerRouteUrl}
+                      onChange={(e) => setCustomBannerRouteUrl(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none font-mono text-[11px]"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Badge Tag & Presets */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৪. ব্যাজ ট্যাগ (Badge Tag)</label>
+                <div className="flex gap-1.5 mb-1.5 flex-wrap">
+                  {PRESET_BADGE_TAGS.map((badge) => (
+                    <button
+                      key={badge}
+                      type="button"
+                      onClick={() => setNewBanner({ ...newBanner, badge })}
+                      className="px-2 py-0.5 bg-slate-800 border border-slate-700 hover:border-teal-500 text-[10px] font-bold text-slate-300 rounded-lg transition-all"
+                    >
+                      {badge}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="যেমন: NEW FEATURE 🔥"
+                  value={newBanner.badge}
+                  onChange={(e) => setNewBanner({ ...newBanner, badge: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                />
+              </div>
+
+              {/* CTA Button Text */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৫. বাটন টেক্সট (CTA Text)</label>
+                <input
+                  type="text"
+                  placeholder="যেমন: ব্যাটেল শুরু করো ⚔️"
+                  value={newBanner.ctaText}
+                  onChange={(e) => setNewBanner({ ...newBanner, ctaText: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none font-bold text-teal-300"
+                />
+              </div>
+
+              {/* Gradient Color Presets */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৬. ব্যাকগ্রাউন্ড গ্র্যাডিয়েন্ট থীম (Theme Presets)</label>
+                <div className="flex gap-2 mb-2 flex-wrap">
+                  {PRESET_BANNER_GRADIENTS.map((gradient) => (
+                    <button
+                      key={gradient.label}
+                      type="button"
+                      onClick={() => setNewBanner({ ...newBanner, bgGradient: gradient.value })}
+                      className={`px-2.5 py-1 text-[10px] font-bold text-white rounded-lg border transition-all flex items-center gap-1.5 ${
+                        newBanner.bgGradient === gradient.value ? "border-amber-400 ring-2 ring-amber-400/30 scale-105" : "border-white/10 hover:border-white/30"
+                      }`}
+                      style={{ background: gradient.value }}
+                    >
+                      <span>{gradient.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cover Image URL */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৭. কভার ইমেজ URL (অপশনাল)</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={newBanner.imageUrl}
+                  onChange={(e) => setNewBanner({ ...newBanner, imageUrl: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none font-mono text-[11px]"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddBannerOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-all"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold shadow-lg shadow-teal-600/30 transition-all flex items-center gap-1.5"
+                >
+                  <Check width={14} height={14} />
+                  {editingBanner ? "হালনাগাদ সেভ করুন" : "Firebase-এ সেভ করুন"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT CHAPTER MODAL */}
+      {isAddChapterOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <FileCode width={16} height={16} className="text-amber-400" />
+                {editingChapter ? "অধ্যায় সম্পাদনা করুন" : "নতুন অধ্যায় যোগ করুন"}
+              </h3>
+              <button onClick={() => setIsAddChapterOpen(false)} className="text-slate-400 hover:text-white">
+                <X width={16} height={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveChapter} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">১. বিষয় নির্বাচন করুন (Subject) <span className="text-rose-400">*</span></label>
+                <select
+                  required
+                  value={newChapter.subjectId}
+                  onChange={(e) => setNewChapter({ ...newChapter, subjectId: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="">বিষয় সিলেক্ট করুন</option>
+                  {subjects.map((s) => {
+                    const clsName = classes.find((c) => c.id === s.classId)?.name || s.classId;
+                    return (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({clsName})
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">২. অধ্যায়ের নাম (Chapter Name) <span className="text-rose-400">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: অধ্যায় ১: বল ও গতি"
+                  value={newChapter.name}
+                  onChange={(e) => setNewChapter({ ...newChapter, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৩. অধ্যায় নম্বর (Chapter No.)</label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  placeholder="1"
+                  value={newChapter.chapterNo}
+                  onChange={(e) => setNewChapter({ ...newChapter, chapterNo: parseInt(e.target.value) || 1 })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-bold"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAddChapterOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-all"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold shadow-lg shadow-amber-600/30 transition-all flex items-center gap-1.5"
+                >
+                  <Check width={14} height={14} />
+                  {editingChapter ? "হালনাগাদ সেভ করুন" : "Firebase-এ সেভ করুন"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

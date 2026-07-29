@@ -30,7 +30,7 @@ export default function QuestionCard({
         </div>
 
         <h2 className="text-base sm:text-lg font-black text-slate-900 leading-snug tracking-tight">
-          {question.question}
+          {question.question || (question as any).questionText}
         </h2>
       </div>
 

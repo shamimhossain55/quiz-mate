@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase-client";
+import { BannerSlide } from "@/lib/firestore/banners";
 
 // ===== TYPES =====
 export type AdminUser = {
@@ -133,6 +134,55 @@ export async function getChaptersBySubject(subjectId: string): Promise<AdminChap
       { id: `${subjectId}_ch2`, name: "অধ্যায় ২: বিস্তারিত আলোচনা", subjectId, chapterNo: 2, order: 2 },
     ];
   }
+}
+
+export async function getAllChapters(): Promise<AdminChapter[]> {
+  try {
+    const querySnapshot = await getDocs(collection(db, "chapters"));
+    if (querySnapshot.empty) return [];
+    return querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      name: docSnap.data().name || docSnap.data().title || docSnap.id,
+      subjectId: docSnap.data().subjectId || "",
+      chapterNo: docSnap.data().chapterNo || 1,
+      order: docSnap.data().order || 1,
+    }));
+  } catch (err) {
+    console.error("Error fetching all chapters:", err);
+    return [];
+  }
+}
+
+export async function addChapter(chapter: Omit<AdminChapter, "id">): Promise<string> {
+  const docRef = doc(collection(db, "chapters"));
+  const cleanChapter: Record<string, any> = {};
+  Object.keys(chapter).forEach((key) => {
+    const val = (chapter as any)[key];
+    if (val !== undefined) {
+      cleanChapter[key] = val;
+    }
+  });
+  await setDoc(docRef, {
+    ...cleanChapter,
+    createdAt: new Date(),
+  });
+  return docRef.id;
+}
+
+export async function updateChapter(id: string, chapter: Partial<AdminChapter>): Promise<void> {
+  const cRef = doc(db, "chapters", id);
+  const cleanChapter: Record<string, any> = {};
+  Object.keys(chapter).forEach((key) => {
+    const val = (chapter as any)[key];
+    if (val !== undefined) {
+      cleanChapter[key] = val;
+    }
+  });
+  await updateDoc(cRef, cleanChapter);
+}
+
+export async function deleteChapter(id: string): Promise<void> {
+  await deleteDoc(doc(db, "chapters", id));
 }
 
 // ===== USER OPERATIONS =====
@@ -290,8 +340,15 @@ export async function getAllQuestions(): Promise<AdminQuestion[]> {
 
 export async function addQuestion(q: Omit<AdminQuestion, "id">): Promise<string> {
   const docRef = doc(collection(db, "questions"));
+  const cleanData: Record<string, any> = {};
+  Object.keys(q).forEach((key) => {
+    const val = (q as any)[key];
+    if (val !== undefined) {
+      cleanData[key] = val;
+    }
+  });
   await setDoc(docRef, {
-    ...q,
+    ...cleanData,
     createdAt: new Date(),
   });
   return docRef.id;
@@ -299,7 +356,14 @@ export async function addQuestion(q: Omit<AdminQuestion, "id">): Promise<string>
 
 export async function updateQuestion(id: string, q: Partial<AdminQuestion>): Promise<void> {
   const qRef = doc(db, "questions", id);
-  await updateDoc(qRef, q);
+  const cleanData: Record<string, any> = {};
+  Object.keys(q).forEach((key) => {
+    const val = (q as any)[key];
+    if (val !== undefined) {
+      cleanData[key] = val;
+    }
+  });
+  await updateDoc(qRef, cleanData);
 }
 
 export async function deleteQuestion(id: string): Promise<void> {
@@ -332,3 +396,60 @@ export async function addBulkQuestions(
   await batch.commit();
   return count;
 }
+
+// ===== BANNER CAROUSEL OPERATIONS =====
+export async function getAllBanners(): Promise<BannerSlide[]> {
+  try {
+    const querySnapshot = await getDocs(collection(db, "banners"));
+    if (querySnapshot.empty) return [];
+    return querySnapshot.docs.map((docSnap) => ({
+      id: docSnap.id,
+      title: docSnap.data().title || "",
+      subtitle: docSnap.data().subtitle || "",
+      badge: docSnap.data().badge || "",
+      badgeColor: docSnap.data().badgeColor || "",
+      imageUrl: docSnap.data().imageUrl || "",
+      linkUrl: docSnap.data().linkUrl || "/",
+      ctaText: docSnap.data().ctaText || "",
+      bgGradient: docSnap.data().bgGradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 100%)",
+      order: docSnap.data().order || 1,
+    }));
+  } catch (err) {
+    console.error("Error fetching banners:", err);
+    return [];
+  }
+}
+
+export async function addBannerDoc(banner: Omit<BannerSlide, "id">): Promise<string> {
+  const docRef = doc(collection(db, "banners"));
+  const cleanBanner: Record<string, any> = {};
+  Object.keys(banner).forEach((key) => {
+    const val = (banner as any)[key];
+    if (val !== undefined) {
+      cleanBanner[key] = val;
+    }
+  });
+  await setDoc(docRef, {
+    ...cleanBanner,
+    createdAt: new Date(),
+  });
+  return docRef.id;
+}
+
+export async function updateBannerDoc(id: string, banner: Partial<BannerSlide>): Promise<void> {
+  const bRef = doc(db, "banners", id);
+  const cleanBanner: Record<string, any> = {};
+  Object.keys(banner).forEach((key) => {
+    const val = (banner as any)[key];
+    if (val !== undefined) {
+      cleanBanner[key] = val;
+    }
+  });
+  await updateDoc(bRef, cleanBanner);
+}
+
+export async function deleteBannerDoc(id: string): Promise<void> {
+  await deleteDoc(doc(db, "banners", id));
+}
+
+

@@ -44,8 +44,7 @@ export default function QuizPlayPage() {
         router.replace("/dashboard");
         return;
       }
-      const quizId = `${config.chapterId}_quiz`;
-      const data = await getQuestions(quizId);
+      const data = await getQuestions(config.chapterId, config.subjectId);
       setQuestions(data);
       // questions গুলো context-এ persist করো যাতে review page re-fetch না করে
       setPlayedQuestions(data);
@@ -53,7 +52,7 @@ export default function QuizPlayPage() {
       setLoading(false);
     }
     loadQuestions();
-  }, [config.chapterId, config.timeLimit, router, resetTimer, setPlayedQuestions]);
+  }, [config.chapterId, config.subjectId, config.timeLimit, router, resetTimer, setPlayedQuestions]);
 
   const totalQuestions = Math.min(
     config.questionCount || 10,
@@ -92,11 +91,10 @@ export default function QuizPlayPage() {
       });
     }
 
-    resetQuiz();
     router.push(
       `/quiz/result?score=${score}&correct=${correct}&wrong=${wrong}&total=${totalQuestions}`
     );
-  }, [answers, questions, totalQuestions, session, config, resetQuiz, router]);
+  }, [answers, questions, totalQuestions, session, config, router]);
 
   useEffect(() => {
     if (loading) return;

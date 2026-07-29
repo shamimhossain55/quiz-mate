@@ -34,70 +34,45 @@ type Player = {
   badgeTitle?: string;
 };
 
-const playersWeekly: Player[] = [
-  { uid: "u1", name: "আয়েশা রহমান", point: 1240, avatarUrl: null, prevRank: 2, streak: 12, level: 15, badgeTitle: "🏆 চ্যাম্পিয়ন" },
-  { uid: "u2", name: "তানভীর আহমেদ", point: 1180, avatarUrl: null, prevRank: 1, streak: 9, level: 14, badgeTitle: "⚡ রানার-আপ" },
-  { uid: "u3", name: "নুসরাত জাহান", point: 1105, avatarUrl: null, prevRank: 3, streak: 8, level: 13, badgeTitle: "🔥 ৩য় স্থান" },
-  { uid: "u4", name: "রাকিব হাসান", point: 990, avatarUrl: null, prevRank: 6, streak: 5, level: 11 },
-  { uid: "u5", name: "শামীম হোসেন", point: 850, avatarUrl: null, prevRank: 7, streak: 7, level: 12 }, // Logged in user
-  { uid: "u6", name: "মিম আক্তার", point: 812, avatarUrl: null, prevRank: 4, streak: 4, level: 10 },
-  { uid: "u7", name: "ফাহিম শাহরিয়ার", point: 760, avatarUrl: null, prevRank: 5, streak: 6, level: 9 },
-  { uid: "u8", name: "সাদিয়া ইসলাম", point: 705, avatarUrl: null, prevRank: 8, streak: 3, level: 8 },
-];
-
-const playersMonthly: Player[] = [
-  { uid: "u2", name: "তানভীর আহমেদ", point: 4820, avatarUrl: null, prevRank: 2, streak: 21, level: 14, badgeTitle: "🏆 চ্যাম্পিয়ন" },
-  { uid: "u1", name: "আয়েশা রহমান", point: 4650, avatarUrl: null, prevRank: 1, streak: 18, level: 15, badgeTitle: "⚡ রানার-আপ" },
-  { uid: "u3", name: "নুসরাত জাহান", point: 3950, avatarUrl: null, prevRank: 3, streak: 14, level: 13, badgeTitle: "🔥 ৩য় স্থান" },
-  { uid: "u4", name: "রাকিব হাসান", point: 3450, avatarUrl: null, prevRank: 4, streak: 10, level: 11 },
-  { uid: "u5", name: "শামীম হোসেন", point: 3210, avatarUrl: null, prevRank: 8, streak: 7, level: 12 },
-  { uid: "u6", name: "মিম আক্তার", point: 3100, avatarUrl: null, prevRank: 5, streak: 8, level: 10 },
-];
-
-const playersAllTime: Player[] = [
-  { uid: "u1", name: "আয়েশা রহমান", point: 18450, avatarUrl: null, prevRank: 1, streak: 45, level: 25, badgeTitle: "👑 অল-টাইম কিং" },
-  { uid: "u2", name: "তানভীর আহমেদ", point: 16900, avatarUrl: null, prevRank: 2, streak: 38, level: 23, badgeTitle: "⚔️ মাস্টরমাইন্ড" },
-  { uid: "u3", name: "নুসরাত জাহান", point: 14200, avatarUrl: null, prevRank: 3, streak: 30, level: 20, badgeTitle: "🌟 গ্র্যান্ডমাস্টার" },
-  { uid: "u5", name: "শামীম হোসেন", point: 11500, avatarUrl: null, prevRank: 6, streak: 15, level: 18 },
-  { uid: "u4", name: "রাকিব হাসান", point: 10800, avatarUrl: null, prevRank: 4, streak: 12, level: 16 },
-];
-
 export default function LeaderboardPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [timeframe, setTimeframe] = useState<"weekly" | "monthly" | "allTime">("weekly");
   const [firestorePlayers, setFirestorePlayers] = useState<Player[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchLeaderboard() {
-      const students = await getTopStudents(20);
-      if (students && students.length > 0) {
-        const mapped: Player[] = students.map((st, idx) => ({
-          uid: st.email || st.id,
-          name: st.name,
-          point: st.point,
-          avatarUrl: st.avatarUrl || null,
-          prevRank: idx + 1,
-          streak: st.streak || 1,
-          level: st.level || Math.floor(st.point / 100) + 1,
-          badgeTitle: idx === 0 ? "🏆 চ্যাম্পিয়ন" : idx === 1 ? "⚡ রানার-আপ" : idx === 2 ? "🔥 ৩য় স্থান" : undefined,
-        }));
-        setFirestorePlayers(mapped);
+      setLoading(true);
+      try {
+        const students = await getTopStudents(20);
+        if (students && students.length > 0) {
+          const mapped: Player[] = students.map((st, idx) => ({
+            uid: st.email || st.id,
+            name: st.name,
+            point: st.point,
+            avatarUrl: st.avatarUrl || null,
+            prevRank: idx + 1,
+            streak: st.streak || 1,
+            level: st.level || Math.floor(st.point / 100) + 1,
+            badgeTitle: idx === 0 ? "🏆 চ্যাম্পিয়ন" : idx === 1 ? "⚡ রানার-আপ" : idx === 2 ? "🔥 ৩য় স্থান" : undefined,
+          }));
+          setFirestorePlayers(mapped);
+        } else {
+          setFirestorePlayers([]);
+        }
+      } catch (e) {
+        console.error("Error fetching leaderboard:", e);
+      } finally {
+        setLoading(false);
       }
     }
     fetchLeaderboard();
   }, []);
 
-  const defaultList =
-    timeframe === "monthly"
-      ? playersMonthly
-      : timeframe === "allTime"
-      ? playersAllTime
-      : playersWeekly;
+  const currentPlayersList = firestorePlayers;
 
-  const currentPlayersList = firestorePlayers.length >= 3 ? firestorePlayers : defaultList;
-
-  const currentUserUid = session?.user?.email || "u5";
+  const currentUserUid = session?.user?.email || "";
 
   const top3 = currentPlayersList.slice(0, 3);
   const rest = currentPlayersList.slice(3);
@@ -176,11 +151,19 @@ export default function LeaderboardPage() {
           </div>
 
           {/* ট্রান্সপারেন্ট ৩ডি পোডিয়াম স্টেজ */}
-          <div className="flex items-end justify-center gap-2.5 pt-1">
-            {top3[1] && <PodiumCard player={top3[1]} rank={2} />}
-            {top3[0] && <PodiumCard player={top3[0]} rank={1} />}
-            {top3[2] && <PodiumCard player={top3[2]} rank={3} />}
-          </div>
+          {top3.length > 0 ? (
+            <div className="flex items-end justify-center gap-2.5 pt-1">
+              {top3[1] && <PodiumCard player={top3[1]} rank={2} />}
+              {top3[0] && <PodiumCard player={top3[0]} rank={1} />}
+              {top3[2] && <PodiumCard player={top3[2]} rank={3} />}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-6 text-center text-slate-500 gap-1.5">
+              <Trophy width={32} height={32} className="text-amber-400 opacity-60" />
+              <p className="text-xs font-bold text-slate-700">এখনো কোনো প্রতিযোগী নেই</p>
+              <p className="text-[10px] text-slate-400">প্রথম কুইজ খেলে লিডারবোর্ডে উঠে আসুন!</p>
+            </div>
+          )}
         </div>
 
         {/* স্ক্রলযোগ্য মিডল সেকশন */}
@@ -253,23 +236,25 @@ export default function LeaderboardPage() {
           )}
 
           {/* বাকি শিক্ষার্থী তালিকা */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-bold text-slate-700 tracking-wide">অন্যান্য প্রতিযোগীবৃন্দ</p>
-              <span className="text-[10px] font-semibold text-slate-400">প্রতি ঘন্টা আপডেট হয়</span>
-            </div>
+          {rest.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-slate-700 tracking-wide">অন্যান্য প্রতিযোগীবৃন্দ</p>
+                <span className="text-[10px] font-semibold text-slate-400">প্রতি ঘন্টা আপডেট হয়</span>
+              </div>
 
-            <div className="flex flex-col gap-2">
-              {rest.map((player, idx) => (
-                <RankRow
-                  key={player.uid}
-                  player={player}
-                  rank={idx + 4}
-                  isCurrentUser={player.uid === currentUserUid}
-                />
-              ))}
+              <div className="flex flex-col gap-2">
+                {rest.map((player, idx) => (
+                  <RankRow
+                    key={player.uid}
+                    player={player}
+                    rank={idx + 4}
+                    isCurrentUser={player.uid === currentUserUid}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* পুরস্কার ও সম্মাননা ব্যানার */}
           <div className="rounded-2xl p-3 bg-gradient-to-r from-amber-500/10 via-amber-400/5 to-teal-500/10 border border-amber-300/40 flex items-center gap-2.5">

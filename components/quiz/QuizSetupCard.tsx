@@ -18,10 +18,12 @@ import {
 
 import { useQuizConfig } from "@/context/QuizConfigContext";
 import { useQuizSession } from "@/context/QuizSessionContext";
+import { useQuiz } from "@/context/QuizContext";
 import { startQuiz } from "@/lib/quiz/startQuiz";
 
 interface QuizSetupCardProps {
   chapterId: string;
+  subjectId?: string;
 }
 
 // Game mode presets
@@ -76,10 +78,11 @@ const gameModes = [
 const questionCounts = [10, 15, 20, 25, 30];
 const timeLimits = [5, 10, 15, 20, 30];
 
-export default function QuizSetupCard({ chapterId }: QuizSetupCardProps) {
+export default function QuizSetupCard({ chapterId, subjectId }: QuizSetupCardProps) {
   const router = useRouter();
   const { setConfig } = useQuizConfig();
   const { setSession } = useQuizSession();
+  const { resetQuiz } = useQuiz();
 
   const [selectedMode, setSelectedMode] = useState<string>("standard");
   const [questionCount, setQuestionCount] = useState(20);
@@ -102,7 +105,8 @@ export default function QuizSetupCard({ chapterId }: QuizSetupCardProps) {
   async function handleStartQuiz() {
     setIsStarting(true);
     try {
-      setConfig({ chapterId, questionCount, timeLimit, negativeMarking });
+      resetQuiz();
+      setConfig({ chapterId, subjectId, questionCount, timeLimit, negativeMarking });
       const session = startQuiz(chapterId, questionCount, timeLimit, negativeMarking);
       setSession(session);
       router.push("/quiz/play");

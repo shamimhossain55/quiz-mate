@@ -9,6 +9,7 @@ import {
 
 interface QuizConfig {
   chapterId: string;
+  subjectId?: string;
   questionCount: number;
   timeLimit: number;
   negativeMarking: boolean;
@@ -26,6 +27,7 @@ interface QuizConfigContextType {
 
 const defaultConfig: QuizConfig = {
   chapterId: "",
+  subjectId: "",
   questionCount: 20,
   timeLimit: 20,
   negativeMarking: false,
