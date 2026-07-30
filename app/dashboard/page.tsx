@@ -78,23 +78,78 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const [subjectsList, setSubjectsList] = useState<SubjectItem[]>([]);
   const [student, setStudent] = useState<Student | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [bannerList, setBannerList] = useState<BannerSlide[]>([]);
   const [greeting, setGreeting] = useState("শুভ দিন");
   const [greetingEmoji, setGreetingEmoji] = useState("✨");
 
   useEffect(() => {
+    const userEmail = session?.user?.email?.toLowerCase() || null;
+    const userAvatarKey = userEmail ? `qm_avatar_${userEmail}` : null;
+
+    // Only load cached avatar if it belongs to the current logged-in user
+    if (userAvatarKey) {
+      const cachedAvatar = localStorage.getItem(userAvatarKey);
+      if (cachedAvatar) setUserAvatar(cachedAvatar);
+      else setUserAvatar(null); // clear any stale avatar from previous user
+    } else {
+      // No session yet — don't show any cached avatar
+      setUserAvatar(null);
+    }
+
+    const handleAvatarUpdate = () => {
+      if (userAvatarKey) {
+        const updated = localStorage.getItem(userAvatarKey);
+        setUserAvatar(updated || null);
+      }
+    };
+
+    window.addEventListener("qm_avatar_updated", handleAvatarUpdate);
+    window.addEventListener("storage", handleAvatarUpdate);
+
     const hour = new Date().getHours();
     if (hour >= 5 && hour < 12) { setGreeting("শুভ সকাল"); setGreetingEmoji("☀️"); }
     else if (hour >= 12 && hour < 17) { setGreeting("শুভ দুপুর"); setGreetingEmoji("🌤️"); }
-    else if (hour >= 17 && hour < 20) { setGreeting("শুভ সন্ধ্যা"); setGreetingEmoji("<ctrl42>"); }
+    else if (hour >= 17 && hour < 20) { setGreeting("শুভ সন্ধ্যা"); setGreetingEmoji("🌅"); }
     else { setGreeting("শুভ রাত্রি"); setGreetingEmoji("🌙"); }
 
     async function loadData() {
+      const avatarKey = session?.user?.email ? `qm_avatar_${session.user.email.toLowerCase()}` : null;
       try {
-        let studentProfile = null;
-        if (session?.user?.email) {
-          studentProfile = await getStudentProfile(session.user.email);
-          if (studentProfile) setStudent(studentProfile);
+        let currentStudentProfile: any = null;
+        try {
+          const pRes = await fetch("/api/profile");
+          const pData = await pRes.json();
+          if (pRes.ok && pData.student) {
+            currentStudentProfile = pData.student;
+            setStudent(pData.student);
+            if (pData.student.avatarUrl && avatarKey) {
+              setUserAvatar(pData.student.avatarUrl);
+              localStorage.setItem(avatarKey, pData.student.avatarUrl);
+            } else if (!pData.student.avatarUrl) {
+              if (avatarKey) localStorage.removeItem(avatarKey);
+              setUserAvatar(null);
+            }
+          }
+        } catch {}
+
+        if (currentStudentProfile && currentStudentProfile.profileComplete === false) {
+          router.replace("/onboarding");
+          return;
+        }
+
+        if (!currentStudentProfile && session?.user?.email) {
+          currentStudentProfile = await getStudentProfile(session.user.email);
+          if (currentStudentProfile) {
+            setStudent(currentStudentProfile);
+            if (currentStudentProfile.avatarUrl && avatarKey) {
+              setUserAvatar(currentStudentProfile.avatarUrl);
+              localStorage.setItem(avatarKey, currentStudentProfile.avatarUrl);
+            } else if (!currentStudentProfile.avatarUrl) {
+              if (avatarKey) localStorage.removeItem(avatarKey);
+              setUserAvatar(null);
+            }
+          }
         }
 
         const activeBanners = await getActiveBanners();
@@ -106,8 +161,8 @@ export default function DashboardPage() {
           if (cached) localImages = JSON.parse(cached);
         } catch (e) {}
 
-        const targetClassId = studentProfile?.classId || "class6";
-        const targetGroup = studentProfile?.group || "all";
+        const targetClassId = currentStudentProfile?.classId || "class6";
+        const targetGroup = currentStudentProfile?.group || "all";
         const firestoreSubjects = await getSubjects(targetClassId, targetGroup);
         if (firestoreSubjects && firestoreSubjects.length > 0) {
           const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => {
@@ -135,6 +190,11 @@ export default function DashboardPage() {
       } catch (err) { console.error("Error loading dashboard data:", err); }
     }
     loadData();
+
+    return () => {
+      window.removeEventListener("qm_avatar_updated", handleAvatarUpdate);
+      window.removeEventListener("storage", handleAvatarUpdate);
+    };
   }, [session]);
 
   return (
@@ -154,9 +214,9 @@ export default function DashboardPage() {
               <div className="relative">
                 <div className="h-12 w-12 rounded-full p-[2.5px] bg-gradient-to-tr from-teal-500 via-emerald-400 to-indigo-500 shadow-md">
                   <div className="h-full w-full rounded-full bg-slate-900 flex items-center justify-center border border-white/10 overflow-hidden">
-                    {student?.avatarUrl ? (
+                    {userAvatar || student?.avatarUrl || session?.user?.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={student.avatarUrl} alt={student.name} className="h-full w-full object-cover" />
+                      <img src={userAvatar || student?.avatarUrl || session?.user?.image || ""} alt={student?.name || "User"} className="h-full w-full object-cover" />
                     ) : (
                       <span className="text-teal-300 font-black text-lg">
                         {(student?.name || session?.user?.name || "S").charAt(0).toUpperCase()}

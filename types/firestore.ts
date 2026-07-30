@@ -61,13 +61,67 @@ export interface Result {
 export interface Student {
   id: string;
   uid?: string;
+  customUid?: string;
+  customUidLower?: string;
   name: string;
   email: string;
+  division?: string;
+  district?: string;
+  upazila?: string;
   classId?: string;
+  className?: string;
   group?: string;
+  profileComplete?: boolean;
   point: number;
   totalExam: number;
   streak?: number;
   level?: number;
   avatarUrl?: string | null;
+  bio?: string | null;
+  isPro?: boolean;
+  likesCount?: number;
+  friendsCount?: number;
+  achievementsCount?: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
+export interface FriendRequest {
+  id: string;
+  senderEmail: string;
+  senderName: string;
+  senderAvatar?: string | null;
+  senderUid: string;
+  receiverEmail: string;
+  receiverName: string;
+  receiverAvatar?: string | null;
+  receiverUid: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Friendship {
+  id: string;
+  user1Email: string;
+  user2Email: string;
+  createdAt: string;
+}
+
+export interface ProfileLike {
+  id: string;
+  targetEmail: string;
+  likerEmail: string;
+  createdAt: string;
+}
+
+export interface AchievementItem {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  category: "quiz" | "social" | "streak" | "xp";
+  requiredCount?: number;
+  unlocked: boolean;
+  unlockedAt?: string | null;
 }

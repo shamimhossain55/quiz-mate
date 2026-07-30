@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase-admin";
+import { generateUniqueCustomUid } from "@/lib/profile-utils";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -17,9 +18,12 @@ export async function GET() {
   const studentSnap = await studentRef.get();
 
   if (!studentSnap.exists) {
+    const customUid = await generateUniqueCustomUid();
     const newStudentData = {
       name: session.user.name ?? "শিক্ষার্থী",
       email: email,
+      customUid,
+      customUidLower: customUid.toLowerCase(),
       photoUrl: session.user.image ?? null,
       classId: null as string | null, // যেমন: "class6", "class9_10" — onboarding এ সেট হবে
       className: null as string | null, // display নাম, যেমন: "Class 6", "Class 9-10 (SSC)"

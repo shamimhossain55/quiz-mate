@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Hind_Siliguri } from "next/font/google";
+import { Geist, Geist_Mono, Hind_Siliguri, Inter } from "next/font/google";
 
 import { Providers } from "./providers";
 
@@ -13,6 +13,12 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 const hindSiliguri = Hind_Siliguri({
@@ -34,7 +40,7 @@ export default function RootLayout({
   return (
     <html
       lang="bn"
-      className={`${geistSans.variable} ${geistMono.variable} ${hindSiliguri.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${hindSiliguri.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Providers>

@@ -19,6 +19,15 @@ interface UpdateStudentStatsParams {
   point: number;
 }
 
+/** Ensures the name field never contains an email address */
+function cleanName(name: string | undefined | null, emailFallback: string): string {
+  if (name && !name.includes("@") && name.trim().length > 0) return name.trim();
+  // name is missing or is an email — derive a readable username from email
+  const username = emailFallback.split("@")[0] || "শিক্ষার্থী";
+  // Capitalize first letter
+  return username.charAt(0).toUpperCase() + username.slice(1);
+}
+
 export async function getStudentProfile(studentId: string): Promise<Student | null> {
   if (!studentId) return null;
   try {
@@ -28,17 +37,24 @@ export async function getStudentProfile(studentId: string): Promise<Student | nu
       return null;
     }
     const data = snap.data();
+    const email = data.email || studentId;
     return {
       id: snap.id,
-      name: data.name || studentId.split("@")[0] || "Student",
-      email: data.email || studentId,
+      name: cleanName(data.name, email),
+      email,
+      customUid: data.customUid || "",
+      division: data.division || "",
+      district: data.district || "",
+      upazila: data.upazila || "",
       point: data.point || 0,
       totalExam: data.totalExam || 0,
       streak: data.streak || 1,
       level: data.level || Math.floor((data.point || 0) / 100) + 1,
       avatarUrl: data.avatarUrl || null,
       classId: data.classId || "class6",
+      className: data.className || "",
       group: data.group || "all",
+      profileComplete: data.profileComplete ?? false,
     };
   } catch (error) {
     console.error("Error fetching student profile:", error);
@@ -99,7 +115,7 @@ export async function updateStudentStats({
   }
 }
 
-export async function getTopStudents(limitCount = 10): Promise<Student[]> {
+export async function getTopStudents(limitCount = 50): Promise<Student[]> {
   try {
     const q = query(
       collection(db, "students"),
@@ -109,17 +125,24 @@ export async function getTopStudents(limitCount = 10): Promise<Student[]> {
     const snap = await getDocs(q);
     return snap.docs.map((docSnap) => {
       const data = docSnap.data();
+      const email = data.email || docSnap.id;
       return {
         id: docSnap.id,
         uid: docSnap.id,
-        name: data.name || "শিক্ষার্থী",
-        email: data.email || "",
+        customUid: data.customUid || "",
+        name: cleanName(data.name, email),
+        email,
+        division: data.division || "",
+        district: data.district || "",
+        upazila: data.upazila || "",
         point: data.point || 0,
         totalExam: data.totalExam || 0,
         streak: data.streak || 1,
         level: data.level || Math.floor((data.point || 0) / 100) + 1,
         avatarUrl: data.avatarUrl || null,
         classId: data.classId || "class6",
+        className: data.className || "",
+        group: data.group || "all",
       };
     });
   } catch (error) {

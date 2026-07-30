@@ -15,41 +15,46 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const classId: string | undefined = body?.classId;
   const group: string | undefined = body?.group;
+  const name: string | undefined = body?.name;
+  const division: string | undefined = body?.division;
+  const district: string | undefined = body?.district;
+  const upazila: string | undefined = body?.upazila;
 
   if (!classId) {
-    return NextResponse.json({ error: "classId দেওয়া হয়নি" }, { status: 400 });
+    return NextResponse.json({ error: "শ্রেণী নির্বাচন করা হয়নি" }, { status: 400 });
   }
 
-  // classId টা আসলেই আছে কিনা এবং hasGroups অনুযায়ী group ঠিকমতো দেওয়া হয়েছে কিনা যাচাই
-  const classRef = adminDb.collection("classes").doc(classId);
-  const classSnap = await classRef.get();
+  const CLASS_NAME_MAP: Record<string, string> = {
+    class6: "ষষ্ঠ শ্রেণী",
+    class7: "সপ্তম শ্রেণী",
+    class8: "অষ্টম শ্রেণী",
+    class9: "নবম শ্রেণী",
+    class10: "দশম শ্রেণী",
+    class9_10: "নবম-দশম শ্রেণী (SSC)",
+    class11: "একাদশ শ্রেণী",
+    class12: "দ্বাদশ শ্রেণী",
+    class11_12: "একাদশ-দ্বাদশ শ্রেণী (HSC)",
+  };
 
-  if (!classSnap.exists) {
-    return NextResponse.json({ error: "এই classId খুঁজে পাওয়া যায়নি" }, { status: 400 });
-  }
-
-  const classData = classSnap.data()!;
-  const hasGroups = Boolean(classData.hasGroups);
-
-  if (hasGroups) {
-    if (!group || !VALID_GROUPS.includes(group as (typeof VALID_GROUPS)[number])) {
-      return NextResponse.json(
-        { error: "এই ক্লাসের জন্য সঠিক group (science/commerce/arts) দেওয়া হয়নি" },
-        { status: 400 }
-      );
-    }
-  }
+  const isHighSchoolOrCollege = ["class9_10", "class9", "class10", "class11_12", "class11", "class12"].includes(classId);
+  const selectedGroup = isHighSchoolOrCollege ? (group || "science") : "all";
 
   const email = session.user.email;
   const docId = email.toLowerCase();
   const studentRef = adminDb.collection("students").doc(docId);
 
-  const updateData = {
+  const updateData: Record<string, any> = {
     classId,
-    className: classData.name ?? classId,
-    group: hasGroups ? group : null,
+    className: CLASS_NAME_MAP[classId] || classId,
+    group: selectedGroup,
     profileComplete: true,
+    updatedAt: new Date().toISOString(),
   };
+
+  if (name?.trim()) updateData.name = name.trim();
+  if (division?.trim()) updateData.division = division.trim();
+  if (district?.trim()) updateData.district = district.trim();
+  if (upazila?.trim()) updateData.upazila = upazila.trim();
 
   await studentRef.set(updateData, { merge: true });
 

@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-  "dev": "next dev",
-  "build": "next build",
-  "start": "next start",
-  "lint": "eslint",
-
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
     "seed:classes": "tsx scripts/seed-classes.ts",
     "seed:subjects": "tsx scripts/seed-subjects.ts",
     "seed:chapters": "tsx scripts/seed-chapters.ts",
@@ -15,12 +14,11 @@
     "seed:quizzes": "tsx scripts/seed-quizzes.ts",
     "seed:all": "tsx scripts/seed-all.ts"
   },
-
-
   "dependencies": {
     "clsx": "^2.1.1",
     "firebase": "^12.15.0",
     "firebase-admin": "^14.1.0",
+    "framer-motion": "^12.43.0",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
     "next-auth": "^4.24.14",

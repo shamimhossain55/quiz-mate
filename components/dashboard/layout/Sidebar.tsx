@@ -9,7 +9,7 @@ import {
   BarChart3,
   Trophy,
   Users,
-  Settings,
+  User,
   LogOut,
 } from "lucide-react";
 
@@ -36,13 +36,13 @@ const menuItems = [
   },
   {
     title: "Friends",
-    href: "/friends",
+    href: "/profile",
     icon: Users,
   },
   {
-    title: "Settings",
-    href: "/settings",
-    icon: Settings,
+    title: "Profile",
+    href: "/profile",
+    icon: User,
   },
 ];
 
