@@ -53,6 +53,23 @@ export async function GET() {
       isUpdated = true;
     }
 
+    // Fallback name if missing
+    if (!studentData.name || typeof studentData.name !== "string" || studentData.name.trim().length === 0) {
+      if (session.user.name) {
+        studentData.name = session.user.name.trim();
+        isUpdated = true;
+      } else {
+        const prefix = email.split("@")[0];
+        studentData.name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+        isUpdated = true;
+      }
+    }
+
+    if (!studentData.avatarUrl && session.user.image) {
+      studentData.avatarUrl = session.user.image;
+      isUpdated = true;
+    }
+
     // Default values if missing
     if (studentData.point === undefined) studentData.point = 0;
     if (studentData.totalExam === undefined) studentData.totalExam = 0;
@@ -122,18 +139,21 @@ export async function PUT(req: Request) {
 
   const email = session.user.email.toLowerCase();
   const body = await req.json();
-  const { name, avatarUrl, bio, classId, className, group } = body;
+  const { name, avatarUrl, bio, classId, className, group, language, division, district } = body;
 
   const updateData: Record<string, any> = {
     updatedAt: new Date().toISOString(),
   };
 
-  if (name !== undefined) updateData.name = name.trim();
+  if (name !== undefined) updateData.name = typeof name === "string" ? name.trim() : name;
   if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
-  if (bio !== undefined) updateData.bio = bio.trim();
+  if (bio !== undefined) updateData.bio = typeof bio === "string" ? bio.trim() : bio;
   if (classId !== undefined) updateData.classId = classId;
   if (className !== undefined) updateData.className = className;
   if (group !== undefined) updateData.group = group;
+  if (language !== undefined) updateData.language = language;
+  if (division !== undefined) updateData.division = typeof division === "string" ? division.trim() : division;
+  if (district !== undefined) updateData.district = typeof district === "string" ? district.trim() : district;
 
   const studentRef = adminDb.collection("students").doc(email);
   await studentRef.set(updateData, { merge: true });

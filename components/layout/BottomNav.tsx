@@ -3,20 +3,22 @@
 import { useRouter } from "next/navigation";
 import { Home, Trophy, TrendingUp, Users, User, LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { useLanguage } from "@/context/LanguageContext";
+import { TranslationKey } from "@/lib/translations";
 
 type Tab = {
   id: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: LucideIcon;
   path: string;
 };
 
 const tabs: Tab[] = [
-  { id: "home", label: "হোম", icon: Home, path: "/dashboard" },
-  { id: "leaderboard", label: "র‍্যাঙ্ক", icon: Trophy, path: "/leaderboard" },
-  { id: "progress", label: "উন্নতি", icon: TrendingUp, path: "/progress" },
-  { id: "community", label: "সবাই", icon: Users, path: "/community" },
-  { id: "profile", label: "প্রোফাইল", icon: User, path: "/profile" },
+  { id: "home", labelKey: "nav_home", icon: Home, path: "/dashboard" },
+  { id: "leaderboard", labelKey: "nav_rank", icon: Trophy, path: "/leaderboard" },
+  { id: "progress", labelKey: "nav_progress", icon: TrendingUp, path: "/progress" },
+  { id: "community", labelKey: "nav_community", icon: Users, path: "/community" },
+  { id: "profile", labelKey: "nav_profile", icon: User, path: "/profile" },
 ];
 
 /**
@@ -25,6 +27,7 @@ const tabs: Tab[] = [
  */
 export default function BottomNav({ activeTab }: { activeTab: string }) {
   const router = useRouter();
+  const { t } = useLanguage();
 
   return (
     <div className="flex-shrink-0 bg-white/85 backdrop-blur-xl border-t border-slate-200/60 shadow-[0_-8px_30px_rgba(15,23,42,0.06)] z-50">
@@ -59,7 +62,7 @@ export default function BottomNav({ activeTab }: { activeTab: string }) {
                   isActive ? "font-extrabold text-teal-800" : "font-semibold text-slate-400"
                 }`}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </span>
             </motion.button>
           );

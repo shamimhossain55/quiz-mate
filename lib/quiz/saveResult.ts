@@ -62,5 +62,6 @@ export async function saveResult({
     timeTaken,
 
     submittedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
   });
 }

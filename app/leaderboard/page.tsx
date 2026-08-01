@@ -456,6 +456,7 @@ export default function LeaderboardPage() {
                     rank={2}
                     isCurrentUser={top3[1].email.toLowerCase() === currentUserEmail}
                     currentUserAvatarKey={currentUserAvatarKey}
+                    onPress={() => router.push(`/users/${encodeURIComponent(top3[1].uid)}`)}
                   />
                 ) : (
                   <div style={{ width: 72 }} />
@@ -466,6 +467,7 @@ export default function LeaderboardPage() {
                     rank={1}
                     isCurrentUser={top3[0].email.toLowerCase() === currentUserEmail}
                     currentUserAvatarKey={currentUserAvatarKey}
+                    onPress={() => router.push(`/users/${encodeURIComponent(top3[0].uid)}`)}
                   />
                 )}
                 {top3[2] ? (
@@ -474,6 +476,7 @@ export default function LeaderboardPage() {
                     rank={3}
                     isCurrentUser={top3[2].email.toLowerCase() === currentUserEmail}
                     currentUserAvatarKey={currentUserAvatarKey}
+                    onPress={() => router.push(`/users/${encodeURIComponent(top3[2].uid)}`)}
                   />
                 ) : (
                   <div style={{ width: 72 }} />
@@ -614,6 +617,7 @@ export default function LeaderboardPage() {
                       rank={idx + 4}
                       isCurrentUser={player.email.toLowerCase() === currentUserEmail}
                       currentUserAvatarKey={currentUserAvatarKey}
+                      onPress={() => router.push(`/users/${encodeURIComponent(player.uid)}`)}
                     />
                   ))}
                 </div>
@@ -665,11 +669,13 @@ function PodiumCard({
   rank,
   isCurrentUser,
   currentUserAvatarKey,
+  onPress,
 }: {
   player: Player;
   rank: 1 | 2 | 3;
   isCurrentUser?: boolean;
   currentUserAvatarKey?: string | null;
+  onPress?: () => void;
 }) {
   const isFirst = rank === 1;
   const isSecond = rank === 2;
@@ -703,7 +709,14 @@ function PodiumCard({
       : "শিক্ষার্থী";
 
   return (
-    <div className="flex flex-col items-center" style={{ width: isFirst ? 88 : 74 }}>
+    <div
+      className="flex flex-col items-center cursor-pointer active:scale-95 transition-transform"
+      style={{ width: isFirst ? 88 : 74 }}
+      onClick={onPress}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onPress?.()}
+    >
       {/* Crown for 1st */}
       {isFirst ? (
         <div className="mb-0.5">
@@ -810,11 +823,13 @@ function RankRow({
   rank,
   isCurrentUser,
   currentUserAvatarKey,
+  onPress,
 }: {
   player: Player;
   rank: number;
   isCurrentUser: boolean;
   currentUserAvatarKey?: string | null;
+  onPress?: () => void;
 }) {
   const avatarSrc =
     player.avatarUrl ||
@@ -831,10 +846,14 @@ function RankRow({
 
   return (
     <div
-      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all duration-200 ${
+      onClick={onPress}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && onPress?.()}
+      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all duration-200 cursor-pointer active:scale-[0.98] ${
         isCurrentUser
           ? "border-teal-500/50 shadow-[0_4px_16px_rgba(20,184,166,0.18)]"
-          : "border-white/5 hover:border-white/10"
+          : "border-white/5 hover:border-white/10 hover:bg-white/5"
       }`}
       style={{
         background: isCurrentUser

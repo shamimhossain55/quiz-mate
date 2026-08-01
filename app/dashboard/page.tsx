@@ -29,6 +29,7 @@ import BannerCarousel from "@/components/dashboard/BannerCarousel";
 import { getSubjects } from "@/lib/firestore/subjects";
 import { getStudentProfile } from "@/lib/firestore/student";
 import { getActiveBanners, BannerSlide } from "@/lib/firestore/banners";
+import { getUserResults } from "@/lib/firestore/results";
 import { Student } from "@/types/firestore";
 
 const CLASS_NAMES: Record<string, string> = {
@@ -163,11 +164,38 @@ export default function DashboardPage() {
 
         const targetClassId = currentStudentProfile?.classId || "class6";
         const targetGroup = currentStudentProfile?.group || "all";
-        const firestoreSubjects = await getSubjects(targetClassId, targetGroup);
+
+        const [firestoreSubjects, userResults] = await Promise.all([
+          getSubjects(targetClassId, targetGroup),
+          userEmail ? getUserResults(userEmail) : Promise.resolve([]),
+        ]);
+
         if (firestoreSubjects && firestoreSubjects.length > 0) {
           const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => {
             const pal = defaultPalette[idx % defaultPalette.length];
             const img = s.imageUrl || localImages[s.id] || localImages[s.slug];
+            const subSlug = (s.slug || s.id).toLowerCase();
+
+            const matchingResults = userResults.filter(
+              (r) =>
+                r.chapterId &&
+                (r.chapterId.toLowerCase().includes(subSlug) || r.chapterId.toLowerCase().includes(s.id.toLowerCase()))
+            );
+
+            const subProgress =
+              matchingResults.length > 0
+                ? Math.round(
+                    matchingResults.reduce(
+                      (acc, curr) =>
+                        acc +
+                        (curr.percentage !== undefined
+                          ? curr.percentage
+                          : Math.round((curr.score / Math.max(1, curr.correct + curr.wrong)) * 100)),
+                      0
+                    ) / matchingResults.length
+                  )
+                : 0;
+
             return {
               id: s.id,
               name: s.name,
@@ -176,9 +204,9 @@ export default function DashboardPage() {
               color: s.color || pal.color,
               gradient: s.color ? `linear-gradient(135deg, ${s.color} 0%, #0F766E 100%)` : pal.gradient,
               shadowColor: s.color ? `${s.color}60` : pal.shadowColor,
-              progress: 0,
+              progress: subProgress,
               chaptersCount: 0,
-              completedChapters: 0,
+              completedChapters: matchingResults.length,
               tagline: s.description || "পাঠ্যবই ও অনুশীলনী",
               imageUrl: img,
             };

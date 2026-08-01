@@ -1,12 +1,14 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { ArrowLeft, BookOpen, Sparkles } from "lucide-react";
 import BottomNav from "@/components/layout/BottomNav";
 import SubjectHeader from "@/components/subject/SubjectHeader";
 import ContinueLearningBanner from "@/components/subject/ContinueLearningBanner";
 import ChapterGrid from "@/components/subject/ChapterGrid";
+import { getUserResults } from "@/lib/firestore/results";
 
 interface SubjectPageProps {
   params: Promise<{
@@ -17,6 +19,48 @@ interface SubjectPageProps {
 export default function SubjectPage({ params }: SubjectPageProps) {
   const { slug } = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
+
+  const [subjectProgress, setSubjectProgress] = useState(0);
+  const [latestChapterTitle, setLatestChapterTitle] = useState(`অধ্যায় ১: ${slug} পরিচিতি`);
+  const [latestChapterId, setLatestChapterId] = useState(`class6_${slug}_ch1`);
+
+  useEffect(() => {
+    async function loadProgress() {
+      if (!session?.user?.email) return;
+      try {
+        const results = await getUserResults(session.user.email);
+        const matched = results.filter(
+          (r) => r.chapterId && r.chapterId.toLowerCase().includes(slug.toLowerCase())
+        );
+
+        if (matched.length > 0) {
+          const avgPct = Math.round(
+            matched.reduce(
+              (acc, r) =>
+                acc +
+                (r.percentage !== undefined
+                  ? r.percentage
+                  : Math.round((r.score / Math.max(1, r.correct + r.wrong)) * 100)),
+              0
+            ) / matched.length
+          );
+          setSubjectProgress(avgPct);
+
+          // Get latest attempt
+          const latest = matched[0];
+          if (latest?.chapterId) {
+            const cleanCh = latest.chapterId.replace(/^class\d+_/, "").replace(/_/g, " ");
+            setLatestChapterTitle(`অধ্যায়: ${cleanCh}`);
+            setLatestChapterId(latest.chapterId);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching subject results:", err);
+      }
+    }
+    loadProgress();
+  }, [session, slug]);
 
   return (
     <div className="h-screen font-sans flex flex-col relative overflow-hidden bg-slate-50 selection:bg-teal-500 selection:text-white">
@@ -50,10 +94,14 @@ export default function SubjectPage({ params }: SubjectPageProps) {
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar">
 
           {/* Subject Header Banner */}
-          <SubjectHeader subjectName={slug} />
+          <SubjectHeader subjectName={slug} progress={subjectProgress} />
 
           {/* Continue Learning Banner */}
-          <ContinueLearningBanner chapterTitle={`অধ্যায় ১: ${slug} পরিচিতি`} progress={65} />
+          <ContinueLearningBanner
+            chapterTitle={latestChapterTitle}
+            chapterId={latestChapterId}
+            progress={subjectProgress || 10}
+          />
 
           {/* Chapters Section */}
           <div className="space-y-2 pt-1">

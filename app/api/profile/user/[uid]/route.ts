@@ -3,123 +3,97 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase-admin";
 
+/**
+ * GET /api/profile/user/[uid]
+ * Returns a public (read-only) view of a student's profile by their Firebase UID (email-based doc ID).
+ * Strips sensitive fields before returning.
+ */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ uid: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: "লগইন করা নেই" }, { status: 401 });
-  }
-
-  const currentEmail = session.user.email.toLowerCase();
   const { uid } = await params;
-  const decodedUid = decodeURIComponent(uid).trim();
-
-  // Find user by customUid or email
-  let targetSnap = await adminDb
-    .collection("students")
-    .where("customUidLower", "==", decodedUid.toLowerCase())
-    .limit(1)
-    .get();
-
-  if (targetSnap.empty) {
-    targetSnap = await adminDb
-      .collection("students")
-      .where("customUid", "==", decodedUid.toUpperCase())
-      .limit(1)
-      .get();
+  if (!uid) {
+    return NextResponse.json({ error: "uid প্রয়োজন" }, { status: 400 });
   }
 
-  if (targetSnap.empty) {
-    targetSnap = await adminDb
-      .collection("students")
-      .where("email", "==", decodedUid.toLowerCase())
-      .limit(1)
-      .get();
-  }
+  // Optionally get session for fallback name/image (not required)
+  const session = await getServerSession(authOptions).catch(() => null);
 
-  if (targetSnap.empty) {
-    const docRef = adminDb.collection("students").doc(decodedUid.toLowerCase());
-    const docSnap = await docRef.get();
-    if (docSnap.exists) {
-      targetSnap = { docs: [docSnap], empty: false } as any;
-    }
-  }
+  try {
+    const rawUid = decodeURIComponent(uid).trim().toLowerCase();
+    let studentRef = adminDb.collection("students").doc(rawUid);
+    let snap = await studentRef.get();
 
-  if (targetSnap.empty) {
-    return NextResponse.json({ error: "ব্যবহারকারী খুঁজে পাওয়া যায়নি" }, { status: 404 });
-  }
-
-  const targetDoc = targetSnap.docs[0];
-  const targetData = targetDoc.data();
-  const targetEmail = (targetData.email || targetDoc.id).toLowerCase();
-
-  // Check if liked by current user
-  const likeDocId = `${targetEmail}_${currentEmail}`;
-  const likeSnap = await adminDb.collection("profile_likes").doc(likeDocId).get();
-  const isLiked = likeSnap.exists;
-
-  // Check relationship status
-  let relationship: "none" | "friends" | "pending_sent" | "pending_received" | "self" = "none";
-
-  if (targetEmail === currentEmail) {
-    relationship = "self";
-  } else {
-    // Check friendship
-    const sortedEmails = [currentEmail, targetEmail].sort();
-    const friendshipId = `${sortedEmails[0]}_${sortedEmails[1]}`;
-    const friendshipSnap = await adminDb.collection("friends").doc(friendshipId).get();
-
-    if (friendshipSnap.exists) {
-      relationship = "friends";
-    } else {
-      // Check pending requests
-      const sentReqSnap = await adminDb
-        .collection("friend_requests")
-        .doc(`${currentEmail}_${targetEmail}`)
+    if (!snap.exists) {
+      const customSnap = await adminDb
+        .collection("students")
+        .where("customUidLower", "==", rawUid)
+        .limit(1)
         .get();
 
-      if (sentReqSnap.exists && sentReqSnap.data()?.status === "pending") {
-        relationship = "pending_sent";
-      } else {
-        const recvReqSnap = await adminDb
-          .collection("friend_requests")
-          .doc(`${targetEmail}_${currentEmail}`)
-          .get();
-
-        if (recvReqSnap.exists && recvReqSnap.data()?.status === "pending") {
-          relationship = "pending_received";
-        }
+      if (!customSnap.empty) {
+        snap = customSnap.docs[0];
+        studentRef = customSnap.docs[0].ref;
       }
     }
+
+    if (!snap.exists) {
+      return NextResponse.json({ error: "প্রোফাইল পাওয়া যায়নি" }, { status: 404 });
+    }
+
+    const data = snap.data() || {};
+
+    // Fetch achievements count
+    const achSnap = await adminDb
+      .collection("user_achievements")
+      .where("userEmail", "==", decodeURIComponent(uid))
+      .get();
+
+    // Resolve display name (prefer name saved in Firestore from onboarding/profile edit)
+    let displayName: string;
+    if (data.name && typeof data.name === "string" && data.name.trim().length > 0) {
+      displayName = data.name.trim();
+    } else if (session?.user?.email?.toLowerCase() === decodeURIComponent(uid).toLowerCase() && session.user.name) {
+      displayName = session.user.name.trim();
+    } else {
+      const prefix = decodeURIComponent(uid).split("@")[0] || "শিক্ষার্থী";
+      displayName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+
+    // Resolve avatar: Firestore > session image > null
+    let avatarUrl: string | null = data.avatarUrl || null;
+    if (!avatarUrl && session?.user?.email?.toLowerCase() === decodeURIComponent(uid).toLowerCase()) {
+      avatarUrl = session.user.image || null;
+    }
+
+    // Return only public fields — no email, no private data
+    const publicProfile = {
+      uid: snap.id,
+      name: displayName,
+      customUid: data.customUid || "",
+      avatarUrl,
+      bio: data.bio || "",
+      classId: data.classId || "class6",
+      className: data.className || "",
+      group: data.group || "all",
+      point: data.point || 0,
+      totalExam: data.totalExam || 0,
+      streak: data.streak || 1,
+      level: data.level || Math.floor((data.point || 0) / 100) + 1,
+      isPro: data.isPro || false,
+      division: data.division || "",
+      district: data.district || "",
+      upazila: data.upazila || "",
+      likesCount: data.likesCount || 0,
+      friendsCount: data.friendsCount || 0,
+      achievementsCount: achSnap.size,
+      createdAt: data.createdAt || "",
+    };
+
+    return NextResponse.json({ student: publicProfile });
+  } catch (err) {
+    console.error("Error fetching public profile:", err);
+    return NextResponse.json({ error: "সার্ভার সমস্যা" }, { status: 500 });
   }
-
-  // Get achievements count
-  const achievementsSnap = await adminDb
-    .collection("user_achievements")
-    .where("userEmail", "==", targetEmail)
-    .get();
-
-  const userProfile = {
-    email: targetEmail,
-    name: targetData.name || "শিক্ষার্থী",
-    customUid: targetData.customUid || "000000",
-    avatarUrl: targetData.avatarUrl || null,
-    bio: targetData.bio || "কুইজ মেট সদস্য",
-    className: targetData.className || "Class 9",
-    point: targetData.point || 0,
-    level: Math.floor((targetData.point || 0) / 100) + 1,
-    streak: targetData.streak || 1,
-    totalExam: targetData.totalExam || 0,
-    likesCount: targetData.likesCount || 0,
-    friendsCount: targetData.friendsCount || 0,
-    achievementsCount: achievementsSnap.size,
-    isPro: targetData.isPro || false,
-    isLiked,
-    relationship,
-  };
-
-  return NextResponse.json({ user: userProfile });
 }

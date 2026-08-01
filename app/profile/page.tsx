@@ -8,7 +8,7 @@ import {
   GraduationCap, Check, Loader2, Copy, UserPlus,
   Users, Heart, Trophy, Target, UserCheck, UserX,
   Edit3, Share2, Shield, HelpCircle, Globe, BarChart3,
-  Zap, Star, Award, ChevronDown, BookOpen, Swords,
+  Zap, Star, Award, ChevronDown, BookOpen, Swords, MapPin,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import BottomNav from "@/components/layout/BottomNav";
@@ -16,6 +16,8 @@ import AchievementModal from "@/components/profile/AchievementModal";
 import FriendSearchModal from "@/components/profile/FriendSearchModal";
 import ProfileShareModal from "@/components/profile/ProfileShareModal";
 import { Student, AchievementItem, FriendRequest } from "@/types/firestore";
+import { useLanguage } from "@/context/LanguageContext";
+import { Language } from "@/lib/translations";
 
 /* ─── Constants ─────────────────────────────────────── */
 const CLASSES_LIST = [
@@ -253,6 +255,7 @@ function SettingsRow({ icon: Icon, label, value, color, trailing }: {
 /* ══════════════════════════════════════════════════ */
 export default function ProfilePage() {
   const { data: session } = useSession();
+  const { setLanguage: setGlobalLanguage, t } = useLanguage();
   const [student, setStudent] = useState<Student | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("badges");
@@ -263,10 +266,13 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
+  const [nameInput, setNameInput] = useState("");
   const [classId, setClassId] = useState("class6");
   const [group, setGroup] = useState("all");
+  const [language, setLanguage] = useState("bn");
+  const [division, setDivision] = useState("");
+  const [district, setDistrict] = useState("");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   const [achievements, setAchievements] = useState<AchievementItem[]>([]);
   const [selectedAchievement, setSelectedAchievement] = useState<AchievementItem | null>(null);
@@ -276,6 +282,7 @@ export default function ProfilePage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [respondingReqId, setRespondingReqId] = useState<string | null>(null);
   const [removingEmail, setRemovingEmail] = useState<string | null>(null);
+  const [uidCopied, setUidCopied] = useState(false);
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const showToast = (msg: string, type: "success" | "error" = "success") => {
@@ -294,9 +301,15 @@ export default function ProfilePage() {
       const pData = await pRes.json();
       if (pRes.ok && pData.student) {
         setStudent(pData.student);
+        setNameInput(pData.student.name || session?.user?.name || "");
         setBioInput(pData.student.bio || "");
         setClassId(pData.student.classId || "class6");
         setGroup(pData.student.group || "all");
+        const studentLang = (pData.student.language as Language) || "bn";
+        setLanguage(studentLang);
+        setGlobalLanguage(studentLang);
+        setDivision(pData.student.division || "");
+        setDistrict(pData.student.district || "");
       }
       const aData = await aRes.json();
       if (aRes.ok) setAchievements(aData.achievements || []);
@@ -403,9 +416,48 @@ export default function ProfilePage() {
     setIsSavingSettings(true);
     try {
       const className = CLASSES_LIST.find(c => c.id === classId)?.name || classId;
-      const r = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ classId, className, group }) });
-      if (r.ok) { setStudent(p => p ? { ...p, classId, group } : null); showToast("সেটিংস সেভ হয়েছে ✅"); }
-    } finally { setIsSavingSettings(false); }
+      const r = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nameInput,
+          bio: bioInput,
+          classId,
+          className,
+          group,
+          language,
+          division,
+          district,
+        }),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (data.student) {
+          setStudent(data.student);
+        } else {
+          setStudent(p => p ? {
+            ...p,
+            name: nameInput,
+            bio: bioInput,
+            classId,
+            className,
+            group,
+            language,
+            division,
+            district,
+          } : null);
+        }
+        localStorage.setItem("qm_language", language);
+        setGlobalLanguage(language as Language);
+        showToast(t("settings_save_success"));
+      } else {
+        showToast(t("settings_save_error"), "error");
+      }
+    } catch {
+      showToast("নেটওয়ার্ক ত্রুটি ঘটেছে", "error");
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   /* ── Friends ─────────────────────────────────── */
@@ -586,13 +638,24 @@ export default function ProfilePage() {
                       <span>{rank.title} • Lv.{lvl}</span>
                     </span>
                     <button
-                      onClick={() => { if (student?.customUid) { navigator.clipboard.writeText(student.customUid); showToast("UID কপি হয়েছে!"); } }}
-                      className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold text-white/80 bg-white/10 hover:bg-white/20 border border-white/15 transition-all cursor-pointer active:scale-95 flex items-center gap-1 shadow-sm"
-                      title="কপি করতে ক্লিক করুন"
+                      onClick={() => {
+                        if (student?.customUid) {
+                          navigator.clipboard.writeText(student.customUid);
+                          setUidCopied(true);
+                          showToast("UID কপি হয়েছে!");
+                          setTimeout(() => setUidCopied(false), 2000);
+                        }
+                      }}
+                      className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-white/90 bg-white/10 hover:bg-white/20 border border-white/15 transition-all cursor-pointer active:scale-95 flex items-center gap-1 shadow-sm"
+                      title="UID কপি করতে ক্লিক করুন"
                     >
                       <span>UID:</span>
                       <span className="text-teal-300 font-extrabold">{student?.customUid || "000000"}</span>
-                      <Copy size={9} className="opacity-60 ml-0.5" />
+                      {uidCopied ? (
+                        <Check size={11} className="text-teal-400" />
+                      ) : (
+                        <Copy size={11} className="text-teal-300/80 hover:text-teal-300" />
+                      )}
                     </button>
                   </div>
 
@@ -737,10 +800,10 @@ export default function ProfilePage() {
               <div className="mx-3 mt-3">
                 <div className="flex gap-1.5 bg-white rounded-[18px] p-1.5" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
                   {([
-                    { id: "badges" as TabId, label: "ব্যাজ", count: unlockedCount },
-                    { id: "friends" as TabId, label: "বন্ধু", count: friends.length, dot: incomingRequests.length > 0 },
-                    { id: "about" as TabId, label: "সেটিংস", count: null },
-                  ] as const).map(tab => {
+                    { id: "badges" as TabId, label: t("tab_badges"), count: unlockedCount },
+                    { id: "friends" as TabId, label: t("tab_friends"), count: friends.length, dot: incomingRequests.length > 0 },
+                    { id: "about" as TabId, label: t("tab_settings"), count: null },
+                  ]).map(tab => {
                     const isActive = activeTab === tab.id;
                     return (
                       <motion.button
@@ -908,70 +971,148 @@ export default function ProfilePage() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.2 }}
-                      className="space-y-3"
+                      className="space-y-3.5"
                     >
-                      {/* Class & Group */}
-                      <div className="rounded-[20px] bg-white overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
-                        <div className="px-4 pt-4 pb-1 flex items-center gap-2 border-b border-slate-50">
-                          <GraduationCap size={15} className="text-indigo-500" />
-                          <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">শ্রেণী ও বিভাগ</span>
+                      {/* 1. Profile Info Form */}
+                      <div className="rounded-[20px] bg-white p-4 space-y-3" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                          <User size={16} className="text-teal-600" />
+                          <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">{t("settings_personal_info")}</span>
                         </div>
-                        <div className="p-4 space-y-3">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-500 mb-1.5">তোমার শ্রেণী</label>
-                            <select value={classId} onChange={e => setClassId(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-400 cursor-pointer transition-colors">
-                              {CLASSES_LIST.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_name_label")}</label>
+                          <input
+                            type="text"
+                            value={nameInput}
+                            onChange={e => setNameInput(e.target.value)}
+                            placeholder={t("settings_name_placeholder")}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_bio_label")}</label>
+                          <input
+                            type="text"
+                            value={bioInput}
+                            onChange={e => setBioInput(e.target.value)}
+                            maxLength={80}
+                            placeholder={t("settings_bio_placeholder")}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_email_label")}</label>
+                          <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-100/70 border border-slate-200/80 rounded-[13px] text-[13px] font-semibold text-slate-500">
+                            <span className="truncate">{student?.email || session?.user?.email || "-"}</span>
+                            <Lock size={13} className="text-slate-400 flex-shrink-0 ml-2" />
                           </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-500 mb-1.5">বিভাগ</label>
-                            <select value={group} onChange={e => setGroup(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-400 cursor-pointer transition-colors">
-                              {GROUPS_LIST.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                            </select>
-                          </div>
-                          <motion.button
-                            whileTap={{ scale: 0.97 }}
-                            transition={spring}
-                            onClick={saveSettings}
-                            disabled={isSavingSettings}
-                            className="w-full py-3 rounded-[13px] font-bold text-[13px] text-white flex items-center justify-center gap-2 cursor-pointer"
-                            style={{ background: "linear-gradient(135deg, #0D9488, #6366F1)", boxShadow: "0 4px 14px rgba(13,148,136,0.25)" }}
+                        </div>
+                      </div>
+
+                      {/* 2. Academic Info */}
+                      <div className="rounded-[20px] bg-white p-4 space-y-3" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                          <GraduationCap size={16} className="text-indigo-500" />
+                          <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">{t("settings_academic_info")}</span>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_class_label")}</label>
+                          <select
+                            value={classId}
+                            onChange={e => setClassId(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 cursor-pointer transition-all"
                           >
-                            {isSavingSettings ? <><Loader2 size={15} className="animate-spin" />সংরক্ষণ...</> : <><Check size={15} />পরিবর্তন সেভ করুন</>}
-                          </motion.button>
+                            {CLASSES_LIST.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_group_label")}</label>
+                          <select
+                            value={group}
+                            onChange={e => setGroup(e.target.value)}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 cursor-pointer transition-all"
+                          >
+                            {GROUPS_LIST.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                          </select>
                         </div>
                       </div>
 
-                      {/* Account info */}
-                      <div className="rounded-[20px] bg-white overflow-hidden divide-y divide-slate-50" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
-                        <div className="px-4 pt-3.5 pb-2 flex items-center gap-2">
-                          <User size={14} className="text-slate-400" />
-                          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">অ্যাকাউন্ট</span>
+                      {/* 3. App Settings & Location */}
+                      <div className="rounded-[20px] bg-white p-4 space-y-3" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
+                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                          <Globe size={16} className="text-amber-500" />
+                          <span className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">{t("settings_app_location_info")}</span>
                         </div>
-                        <SettingsRow icon={User} label="নাম" value={student?.name || session?.user?.name || "-"} color="#0D9488" />
-                        <SettingsRow icon={Mail} label="ইমেইল" value={student?.email || session?.user?.email || "-"} color="#F59E0B" />
-                        <SettingsRow
-                          icon={Lock}
-                          label="পাসওয়ার্ড"
-                          value={showPassword ? "MyP@ssw0rd" : "••••••••"}
-                          color="#EC4899"
-                          trailing={
-                            <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowPassword(v => !v)} className="p-1.5 cursor-pointer text-slate-400 hover:text-slate-600 transition-colors">
-                              {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                            </motion.button>
-                          }
-                        />
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_language_label")}</label>
+                          <select
+                            value={language}
+                            onChange={e => {
+                              const newLang = e.target.value as Language;
+                              setLanguage(newLang);
+                              setGlobalLanguage(newLang);
+                            }}
+                            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-[13px] text-[13px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 cursor-pointer transition-all"
+                          >
+                            <option value="bn">বাংলা (Bengali)</option>
+                            <option value="en">English</option>
+                          </select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_district_label")}</label>
+                            <input
+                              type="text"
+                              value={district}
+                              onChange={e => setDistrict(e.target.value)}
+                              placeholder={t("settings_district_placeholder")}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-[13px] text-[12.5px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-500 mb-1">{t("settings_division_label")}</label>
+                            <input
+                              type="text"
+                              value={division}
+                              onChange={e => setDivision(e.target.value)}
+                              placeholder={t("settings_division_placeholder")}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-[13px] text-[12.5px] font-semibold text-slate-800 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
+                            />
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Support */}
+                      {/* 4. Save Button */}
+                      <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        transition={spring}
+                        onClick={saveSettings}
+                        disabled={isSavingSettings}
+                        className="w-full py-3.5 rounded-[16px] font-extrabold text-[13.5px] text-white flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-98 transition-all"
+                        style={{ background: "linear-gradient(135deg, #0D9488, #6366F1)", boxShadow: "0 6px 20px rgba(13,148,136,0.3)" }}
+                      >
+                        {isSavingSettings ? (
+                          <><Loader2 size={16} className="animate-spin" /> {t("settings_saving")}</>
+                        ) : (
+                          <><Check size={16} /> {t("settings_save_btn")}</>
+                        )}
+                      </motion.button>
+
+                      {/* 5. Support */}
                       <div className="rounded-[20px] bg-white overflow-hidden divide-y divide-slate-50" style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.06)" }}>
                         <div className="px-4 pt-3.5 pb-2 flex items-center gap-2">
                           <HelpCircle size={14} className="text-slate-400" />
-                          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">সহায়তা</span>
+                          <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">{t("settings_support_info")}</span>
                         </div>
-                        <SettingsRow icon={Globe} label="ভাষা" value="বাংলা" color="#0D9488" />
-                        <SettingsRow icon={HelpCircle} label="সাহায্য কেন্দ্র" value="FAQ ও গাইড" color="#6366F1" />
-                        <SettingsRow icon={Shield} label="গোপনীয়তা নীতি" value="v2.0 আপডেটেড" color="#3B82F6" />
+                        <SettingsRow icon={HelpCircle} label={t("settings_help_center")} value={t("settings_help_center_val")} color="#6366F1" />
+                        <SettingsRow icon={Shield} label={t("settings_privacy_policy")} value={t("settings_privacy_policy_val")} color="#3B82F6" />
                       </div>
 
                       {/* Version */}
@@ -984,11 +1125,11 @@ export default function ProfilePage() {
                         whileTap={{ scale: 0.97 }}
                         transition={spring}
                         onClick={() => signOut({ callbackUrl: "/" })}
-                        className="w-full py-4 rounded-[18px] border border-rose-100 bg-white flex items-center justify-center gap-2.5 cursor-pointer hover:bg-rose-50 transition-colors"
+                        className="w-full py-3.5 rounded-[18px] border border-rose-200 bg-white flex items-center justify-center gap-2.5 cursor-pointer hover:bg-rose-50 transition-colors"
                         style={{ boxShadow: "0 2px 10px rgba(225,29,72,0.06)" }}
                       >
                         <LogOut size={17} className="text-rose-500" />
-                        <span className="text-[14px] font-bold text-rose-500">লগ আউট</span>
+                        <span className="text-[14px] font-bold text-rose-500">{t("settings_logout")}</span>
                       </motion.button>
                     </motion.div>
                   )}

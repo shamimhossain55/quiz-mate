@@ -71,6 +71,7 @@ export interface Student {
   classId?: string;
   className?: string;
   group?: string;
+  language?: string;
   profileComplete?: boolean;
   point: number;
   totalExam: number;
