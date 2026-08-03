@@ -8,23 +8,17 @@ import {
   Search,
   UserPlus,
   Users,
-  Zap,
-  Crown,
-  Flame,
-  Trophy,
   Circle,
-  Check,
   X,
   Loader2,
   UserCheck,
   Bell,
-  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSession } from "next-auth/react";
 import BottomNav from "@/components/layout/BottomNav";
 import UserSearchSheet from "@/components/community/UserSearchSheet";
 import IncomingRequestsModal from "@/components/community/IncomingRequestsModal";
-import ChatInbox from "@/components/community/ChatInbox";
 
 /**
  * Premium Community Page
@@ -40,28 +34,29 @@ type Friend = {
   point: number;
   streak: number;
   level: number;
-  customUid?: string;
+  customUid: string;
 };
 
 type FriendRequest = {
   id: string;
   senderEmail: string;
   senderName: string;
+  senderAvatarUrl?: string | null;
   senderAvatar?: string | null;
   senderUid?: string;
   receiverEmail: string;
   status: "pending" | "accepted" | "declined";
-  createdAt: string;
+  createdAt: any;
 };
 
 // অ্যাভাটার কালার ম্যাপ
 const avatarColors = [
-  { bg: "bg-teal-100", text: "text-teal-800", ring: "ring-teal-200" },
-  { bg: "bg-indigo-100", text: "text-indigo-800", ring: "ring-indigo-200" },
-  { bg: "bg-rose-100", text: "text-rose-800", ring: "ring-rose-200" },
-  { bg: "bg-amber-100", text: "text-amber-800", ring: "ring-amber-200" },
-  { bg: "bg-emerald-100", text: "text-emerald-800", ring: "ring-emerald-200" },
-  { bg: "bg-violet-100", text: "text-violet-800", ring: "ring-violet-200" },
+  { bg: "bg-teal-500", text: "text-white", ring: "ring-teal-200" },
+  { bg: "bg-violet-500", text: "text-white", ring: "ring-violet-200" },
+  { bg: "bg-rose-500", text: "text-white", ring: "ring-rose-200" },
+  { bg: "bg-amber-500", text: "text-white", ring: "ring-amber-200" },
+  { bg: "bg-indigo-500", text: "text-white", ring: "ring-indigo-200" },
+  { bg: "bg-emerald-500", text: "text-white", ring: "ring-emerald-200" },
 ];
 
 function colorFor(name: string) {
@@ -72,6 +67,7 @@ function colorFor(name: string) {
 
 export default function CommunityPage() {
   const router = useRouter();
+  const { data: session } = useSession();
 
   // ── Data state ─────────────────────────────────
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -79,14 +75,15 @@ export default function CommunityPage() {
   const [outgoingEmails, setOutgoingEmails] = useState<Set<string>>(new Set());
   const [friendEmails, setFriendEmails] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [lastMessages, setLastMessages] = useState<
+    Record<string, { text: string; senderEmail: string; read: boolean }>
+  >({});
 
   // ── UI state ────────────────────────────────────
   const [showSearch, setShowSearch] = useState(false);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
-  // Chat Inbox
-  const [chatFriend, setChatFriend] = useState<Friend | null>(null);
 
   function showToast(msg: string, type: "ok" | "err" = "ok") {
     setToast({ msg, type });
@@ -120,6 +117,29 @@ export default function CommunityPage() {
         (data.outgoingRequests || []).map((r: any) => r.receiverEmail?.toLowerCase())
       );
       setOutgoingEmails(outgoing);
+
+      // Fetch last message for each friend
+      const msgMap: Record<string, { text: string; senderEmail: string; read: boolean }> = {};
+      await Promise.all(
+        rawFriends.map(async (f) => {
+          try {
+            const r = await fetch(`/api/messages?friendEmail=${encodeURIComponent(f.email)}`);
+            if (!r.ok) return;
+            const d = await r.json();
+            if (d.lastMessage) {
+              msgMap[f.email.toLowerCase()] = d.lastMessage;
+            } else if (d.messages && d.messages.length > 0) {
+              const last = d.messages[d.messages.length - 1];
+              msgMap[f.email.toLowerCase()] = {
+                text: last.text || "",
+                senderEmail: last.senderEmail || "",
+                read: last.read ?? true,
+              };
+            }
+          } catch {}
+        })
+      );
+      setLastMessages(msgMap);
     } catch (e) {
       console.error("Failed to load community data:", e);
     } finally {
@@ -160,7 +180,6 @@ export default function CommunityPage() {
   }
 
   // ── Derived ─────────────────────────────────────
-  const totalXP = friends.reduce((s, f) => s + f.point, 0);
   const pendingCount = incomingRequests.length;
 
   if (isLoading) {
@@ -186,50 +205,46 @@ export default function CommunityPage() {
 
         {/* ── Header ─────────────────────────────── */}
         <div className="flex-shrink-0 px-5 pt-5 pb-2 relative z-20">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="h-9 w-9 rounded-xl bg-violet-100/80 text-violet-700 flex items-center justify-center border border-violet-200/60 shadow-2xs">
                 <Users width={20} height={20} />
               </div>
               <div>
-                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-none">
+                <h1 className="text-lg font-extrabold text-slate-900 tracking-tight leading-none">
                   কমিউনিটি
                 </h1>
-                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                <p className="text-[9.5px] text-slate-400 font-medium mt-0.5">
                   {friends.length} জন বন্ধু
                   {pendingCount > 0 && (
-                    <span className="ml-1.5 inline-flex items-center gap-0.5 text-rose-500 font-bold">
-                      · {pendingCount} নতুন রিকোয়েস্ট
+                    <span className="ml-1 inline-flex items-center text-rose-500 font-bold">
+                      · {pendingCount} রিকোয়েস্ট
                     </span>
                   )}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {/* Refresh */}
-              <button
-                onClick={() => { setIsLoading(true); loadData(); }}
-                aria-label="রিফ্রেশ"
-                className="h-9 w-9 flex items-center justify-center rounded-xl bg-white/90 border border-slate-200/80 active:scale-95 transition-all hover:shadow-sm shadow-2xs cursor-pointer"
-              >
-                <RefreshCw width={15} height={15} className="text-slate-500" />
-              </button>
-
-              {/* Search button (UID search) */}
+            <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+              {/* Wide Search Bar Pill (as drawn in feedback) */}
               <button
                 onClick={() => setShowSearch(true)}
-                aria-label="বন্ধু খুঁজুন"
-                className="h-9 w-9 flex items-center justify-center rounded-xl bg-white/90 border border-slate-200/80 text-slate-700 active:scale-95 transition-all hover:bg-slate-100 shadow-2xs cursor-pointer"
+                aria-label="UID দিয়ে বন্ধু খুঁজুন"
+                className="flex-1 max-w-[170px] h-9 flex items-center justify-between bg-white/90 border border-slate-200/90 rounded-full pl-3 pr-1.5 py-1 text-slate-400 hover:border-teal-400 active:scale-95 transition-all shadow-2xs cursor-pointer group"
               >
-                <Search width={16} height={16} />
+                <span className="text-[10.5px] font-medium text-slate-400 truncate select-none">
+                  UID দিয়ে খুঁজুন...
+                </span>
+                <div className="h-6 w-6 rounded-full bg-slate-100 group-hover:bg-teal-600 group-hover:text-white flex items-center justify-center flex-shrink-0 transition-colors">
+                  <Search width={13} height={13} className="text-slate-500 group-hover:text-white" />
+                </div>
               </button>
 
               {/* Friend Requests icon button with Count Badge */}
               <button
                 onClick={() => setShowRequestsModal(true)}
                 aria-label="ফ্রেন্ড রিকোয়েস্ট সমূহ"
-                className="relative h-9 w-9 flex items-center justify-center rounded-xl bg-teal-700 text-white active:scale-95 transition-all hover:bg-teal-800 shadow-md cursor-pointer"
+                className="relative h-9 w-9 flex-shrink-0 flex items-center justify-center rounded-xl bg-teal-700 text-white active:scale-95 transition-all hover:bg-teal-800 shadow-md cursor-pointer"
               >
                 <UserPlus width={16} height={16} />
                 {pendingCount > 0 && (
@@ -263,28 +278,7 @@ export default function CommunityPage() {
             )}
           </AnimatePresence>
 
-          {/* ── 1v1 Battle CTA ─────────────────── */}
-          <div
-            className="rounded-2xl p-3.5 relative overflow-hidden shadow-[0_8px_20px_rgba(99,102,241,0.18)] border border-white/30 group cursor-pointer active:scale-[0.99] transition-all"
-            style={{ background: "linear-gradient(135deg, #6366F1 0%, #8B5CF6 55%, #A855F7 100%)" }}
-            onClick={() => router.push("/quiz/setup")}
-          >
-            <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-lg pointer-events-none" />
-            <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-violet-300/20 blur-md pointer-events-none" />
-            <div className="relative z-10 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Swords width={16} height={16} className="text-amber-300" />
-                  <span className="text-[10px] font-extrabold text-violet-200 uppercase tracking-wider">১v১ কুইজ ব্যাটেল</span>
-                </div>
-                <h3 className="text-base font-extrabold text-white leading-snug">বন্ধুকে চ্যালেঞ্জ করো!</h3>
-                <p className="text-[10px] text-violet-200 font-medium mt-0.5">একটি বিষয় বেছে নাও আর রিয়েল-টাইমে লড়াই করো ⚔️</p>
-              </div>
-              <div className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-md group-hover:scale-110 transition-transform">
-                <Swords width={22} height={22} className="text-white" />
-              </div>
-            </div>
-          </div>
+
 
           {/* ── Incoming Friend Requests — Facebook Style ── */}
           <AnimatePresence>
@@ -406,7 +400,11 @@ export default function CommunityPage() {
                     <div
                       key={friend.email}
                       className="flex flex-col items-center gap-1 min-w-[68px] cursor-pointer group"
-                      onClick={() => setChatFriend(friend)}
+                      onClick={() =>
+                        router.push(
+                          `/community/chat/${encodeURIComponent(friend.email)}`
+                        )
+                      }
                     >
                       <div className="relative">
                         <div className={`h-14 w-14 rounded-full ${ac.bg} ring-2 ${ac.ring} flex items-center justify-center overflow-hidden shadow-sm group-hover:scale-105 transition-transform`}>
@@ -448,24 +446,7 @@ export default function CommunityPage() {
             </div>
           )}
 
-          {/* ── Community Stats ─────────────────── */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl bg-white border border-slate-200/80 p-2.5 flex flex-col items-center shadow-[0_1px_4px_rgba(15,23,42,0.03)]">
-              <Trophy width={16} height={16} className="text-amber-500 mb-1" />
-              <span className="text-sm font-black text-slate-900">{friends.length}</span>
-              <span className="text-[8px] font-bold text-slate-400 mt-0.5">বন্ধু</span>
-            </div>
-            <div className="rounded-xl bg-white border border-slate-200/80 p-2.5 flex flex-col items-center shadow-[0_1px_4px_rgba(15,23,42,0.03)]">
-              <Zap width={16} height={16} className="text-teal-600 mb-1" />
-              <span className="text-sm font-black text-slate-900">{totalXP}</span>
-              <span className="text-[8px] font-bold text-slate-400 mt-0.5">টোটাল XP</span>
-            </div>
-            <div className="rounded-xl bg-white border border-slate-200/80 p-2.5 flex flex-col items-center shadow-[0_1px_4px_rgba(15,23,42,0.03)]">
-              <Bell width={16} height={16} className="text-rose-500 mb-1" />
-              <span className="text-sm font-black text-slate-900">{pendingCount}</span>
-              <span className="text-[8px] font-bold text-slate-400 mt-0.5">রিকোয়েস্ট</span>
-            </div>
-          </div>
+
 
           {/* ── Full Friends List ───────────────── */}
           {friends.length > 0 ? (
@@ -480,9 +461,19 @@ export default function CommunityPage() {
                     key={friend.email}
                     friend={friend}
                     colorIdx={idx}
+                    myEmail={session?.user?.email?.toLowerCase() || ""}
+                    lastMessage={lastMessages[friend.email.toLowerCase()] ?? null}
                     onChallenge={() => router.push("/quiz/setup")}
-                    onMessage={() => setChatFriend(friend)}
-                    onNameClick={() => setChatFriend(friend)}
+                    onMessage={() =>
+                      router.push(
+                        `/community/chat/${encodeURIComponent(friend.email)}`
+                      )
+                    }
+                    onNameClick={() =>
+                      router.push(
+                        `/community/chat/${encodeURIComponent(friend.email)}`
+                      )
+                    }
                   />
                 ))}
               </div>
@@ -530,13 +521,6 @@ export default function CommunityPage() {
         respondingId={respondingId}
       />
 
-      {/* ── Chat Inbox (Messenger-style) ────────── */}
-      <ChatInbox
-        isOpen={chatFriend !== null}
-        friend={chatFriend}
-        onClose={() => setChatFriend(null)}
-      />
-
       {/* ── BottomNav — badge shows pending count ─ */}
       <BottomNav
         activeTab="community"
@@ -553,21 +537,32 @@ export default function CommunityPage() {
 function FriendCard({
   friend,
   colorIdx,
+  myEmail,
+  lastMessage,
   onMessage,
   onChallenge,
   onNameClick,
 }: {
   friend: Friend;
   colorIdx: number;
+  myEmail: string;
+  lastMessage: { text: string; senderEmail: string; read: boolean } | null;
   onMessage: () => void;
   onChallenge: () => void;
   onNameClick?: () => void;
 }) {
   const ac = colorFor(friend.name);
 
+  const lastMsg = lastMessage;
+  const isUnread =
+    lastMsg !== null &&
+    lastMsg.text !== "" &&
+    lastMsg.senderEmail !== myEmail &&
+    !lastMsg.read;
+
   return (
     <div className="flex items-center gap-2.5 rounded-xl pl-3 pr-2.5 py-2.5 bg-white border border-slate-200/80 shadow-[0_2px_8px_rgba(15,23,42,0.04)] hover:shadow-md transition-all duration-200 active:scale-[0.99]">
-      {/* অ্যাভাটার — click করলে inbox খুলবে */}
+      {/* অ্যাভাটার — click করলে dedicated chat page এ যাবে */}
       <div
         className="relative flex-shrink-0 cursor-pointer"
         onClick={onNameClick}
@@ -592,22 +587,28 @@ function FriendCard({
             Lvl {friend.level}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          {friend.customUid && (
-            <>
-              <span className="text-[9px] font-bold text-teal-700">#{friend.customUid}</span>
-              <span className="text-[9px] text-slate-300">•</span>
-            </>
-          )}
-          <span className="text-[9px] font-bold text-teal-700">{friend.point} XP</span>
-          {friend.streak > 0 && (
-            <>
-              <span className="text-[9px] text-slate-300">•</span>
-              <span className="flex items-center gap-0.5 text-[8px] font-bold text-orange-600">
-                <Flame width={9} height={9} className="fill-orange-500 text-orange-500" />
-                {friend.streak}d
+        <div className="flex items-center gap-1.5 mt-0.5 max-w-[150px]">
+          {lastMsg !== null ? (
+            <div className="flex items-center gap-1.5 overflow-hidden">
+              {isUnread && (
+                <span className="h-2 w-2 rounded-full bg-teal-500 flex-shrink-0 animate-pulse" />
+              )}
+              <span
+                className={`text-[9.5px] truncate ${
+                  isUnread
+                    ? "font-extrabold text-slate-950"
+                    : "font-medium text-slate-400"
+                }`}
+              >
+                {lastMsg.text === ""
+                  ? "কথোপকথন শুরু করুন..."
+                  : lastMsg.senderEmail === myEmail
+                  ? `আপনি: ${lastMsg.text}`
+                  : lastMsg.text}
               </span>
-            </>
+            </div>
+          ) : (
+            <span className="text-[9px] font-medium text-slate-300 italic">মেসেজ নেই</span>
           )}
         </div>
       </div>

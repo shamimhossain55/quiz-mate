@@ -197,26 +197,26 @@ export default function DashboardPage() {
         />
 
         {/* ===== SCROLLABLE MAIN CONTENT AREA ===== */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3.5 pb-6 space-y-4 no-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3.5 pb-8 space-y-4.5 no-scrollbar">
 
-          {/* 2. QUICK ACTIONS DOCK */}
+          {/* 1. HERO PROMOTIONAL BANNER CAROUSEL */}
+          <BannerCarousel slides={bannerList} />
+
+          {/* 2. QUICK ACTIONS SHORTCUT DOCK */}
           <QuickActionsDock />
 
-          {/* 3. GAMIFIED DAILY MISSIONS CARD */}
+          {/* 3. CONTINUE LEARNING (ACTIVE SUBJECT FOCUS) */}
+          <ContinueLearningSection subjectsList={subjectsList} />
+
+          {/* 4. CURRICULUM HUB (ALL SUBJECTS GRID) */}
+          <SubjectGridSection subjectsList={subjectsList} />
+
+          {/* 5. GAMIFIED DAILY MISSIONS & REWARDS */}
           <DailyMissionsCard
             totalExamsPlayed={student?.totalExam || userResultsList.length}
             correctAnswersCount={totalCorrect}
             userEmail={session?.user?.email}
           />
-
-          {/* 4. CONTINUE LEARNING SECTION */}
-          <ContinueLearningSection subjectsList={subjectsList} />
-
-          {/* 5. PROMOTIONAL HERO BANNER CAROUSEL */}
-          <BannerCarousel slides={bannerList} />
-
-          {/* 6. INTERACTIVE 3D BOOK SUBJECT GRID */}
-          <SubjectGridSection subjectsList={subjectsList} />
 
         </div>
       </div>

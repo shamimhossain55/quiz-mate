@@ -37,11 +37,11 @@ export default function BottomNav({
 }) {
   const router = useRouter();
   const { t } = useLanguage();
-  const { pendingCount } = useFriendNotif();
+  const { pendingCount, unreadMsgCount } = useFriendNotif();
 
   // Merge context-driven badges with any manual overrides
   const resolvedBadges: Record<string, number> = {
-    community: pendingCount,
+    community: pendingCount + unreadMsgCount,
     ...badgeCounts,
   };
 

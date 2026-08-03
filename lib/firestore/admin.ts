@@ -23,6 +23,7 @@ export type AdminUser = {
   xp?: number;
   streak?: number;
   status: "active" | "inactive" | "banned";
+  role?: "super_admin" | "admin" | "moderator" | "content_creator" | "user";
   createdAt?: any;
 };
 
@@ -190,15 +191,19 @@ export async function getAllStudents(): Promise<AdminUser[]> {
   try {
     const querySnapshot = await getDocs(collection(db, "students"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      name: docSnap.data().name || "নামহীন ইউজার",
-      email: docSnap.data().email || "email@domain.com",
-      class: docSnap.data().className || docSnap.data().class || "ক্লাস ৯",
-      xp: docSnap.data().point || docSnap.data().xp || 0,
-      streak: docSnap.data().streak || 0,
-      status: docSnap.data().status || "active",
-    }));
+    return querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        name: data.name || "নামহীন ইউজার",
+        email: data.email || "email@domain.com",
+        class: data.className || data.class || "ক্লাস ৯",
+        xp: data.point || data.xp || 0,
+        streak: data.streak || 0,
+        status: data.status || "active",
+        role: data.role || (data.isAdmin ? "admin" : "user"),
+      };
+    });
   } catch (err) {
     console.error("Error fetching students:", err);
     return [];
@@ -217,6 +222,22 @@ export async function addStudent(user: Omit<AdminUser, "id">): Promise<string> {
 export async function updateStudentStatus(id: string, status: "active" | "inactive" | "banned") {
   const userRef = doc(db, "students", id);
   await updateDoc(userRef, { status });
+}
+
+export async function updateStudentRole(
+  id: string,
+  role: "super_admin" | "admin" | "moderator" | "content_creator" | "user"
+) {
+  const userRef = doc(db, "students", id);
+  const isAdminRole =
+    role === "super_admin" ||
+    role === "admin" ||
+    role === "moderator" ||
+    role === "content_creator";
+  await updateDoc(userRef, {
+    role,
+    isAdmin: isAdminRole,
+  });
 }
 
 export async function deleteStudent(id: string) {

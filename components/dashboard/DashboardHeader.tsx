@@ -1,7 +1,9 @@
 "use client";
 
-import { Flame, GraduationCap, Zap, Trophy, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Flame, GraduationCap, Zap, Trophy, MessageCircle } from "lucide-react";
 import { Student } from "@/types/firestore";
+import { useFriendNotif } from "@/context/FriendNotifContext";
 
 const CLASS_NAMES: Record<string, string> = {
   class6: "ষষ্ঠ শ্রেণী",
@@ -36,6 +38,8 @@ export default function DashboardHeader({
   greeting,
   greetingEmoji,
 }: DashboardHeaderProps) {
+  const router = useRouter();
+  const { unreadMsgCount } = useFriendNotif();
   const currentPoints = student?.point || 0;
   const currentLevel = student?.level || 1;
   const xpForNextLevel = currentLevel * 250;
@@ -92,17 +96,33 @@ export default function DashboardHeader({
           </div>
         </div>
 
-        {/* Dynamic Streak Badge */}
-        <div className="flex items-center gap-1.5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-100 border border-orange-200/80 px-2.5 py-1.5 shadow-[0_4px_12px_rgba(249,115,22,0.15)] flex-shrink-0">
-          <div className="relative flex items-center justify-center">
-            <Flame width={18} height={18} className="text-orange-500 fill-orange-500 animate-bounce" style={{ animationDuration: "2s" }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-1">
-              <span className="text-sm font-black text-orange-700 leading-none">{student?.streak || 0}</span>
-              <span className="text-[9px] font-extrabold text-orange-500">দিন</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Message Icon Button with Notification Badge */}
+          <button
+            onClick={() => router.push("/community")}
+            aria-label="মেসেজসমূহ"
+            className="relative h-10 w-10 flex items-center justify-center rounded-2xl bg-teal-50 border border-teal-200/80 text-teal-700 active:scale-95 transition-all hover:bg-teal-100/80 shadow-2xs cursor-pointer group"
+          >
+            <MessageCircle width={19} height={19} className="group-hover:scale-110 transition-transform text-teal-700" />
+            {unreadMsgCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[9.5px] font-black flex items-center justify-center px-1 border-2 border-white shadow-sm animate-pulse">
+                {unreadMsgCount > 9 ? "9+" : unreadMsgCount}
+              </span>
+            )}
+          </button>
+
+          {/* Dynamic Streak Badge */}
+          <div className="flex items-center gap-1.5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-100 border border-orange-200/80 px-2.5 py-1.5 shadow-[0_4px_12px_rgba(249,115,22,0.15)] flex-shrink-0">
+            <div className="relative flex items-center justify-center">
+              <Flame width={18} height={18} className="text-orange-500 fill-orange-500 animate-bounce" style={{ animationDuration: "2s" }} />
             </div>
-            <p className="text-[7.5px] font-extrabold text-orange-600/90 leading-none mt-0.5">স্ট্রিক 🔥</p>
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-black text-orange-700 leading-none">{student?.streak || 0}</span>
+                <span className="text-[9px] font-extrabold text-orange-500">দিন</span>
+              </div>
+              <p className="text-[7.5px] font-extrabold text-orange-600/90 leading-none mt-0.5">স্ট্রিক 🔥</p>
+            </div>
           </div>
         </div>
       </div>

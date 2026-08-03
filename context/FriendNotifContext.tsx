@@ -12,23 +12,25 @@ import { useSession } from "next-auth/react";
 
 interface FriendNotifContextValue {
   pendingCount: number;
+  unreadMsgCount: number;
   refresh: () => void;
 }
 
 const FriendNotifContext = createContext<FriendNotifContextValue>({
   pendingCount: 0,
+  unreadMsgCount: 0,
   refresh: () => {},
 });
 
 /**
  * FriendNotifProvider
- * App-wide context that polls /api/friends for incoming pending requests.
- * Provides `pendingCount` and a `refresh()` function to any child component.
- * BottomNav reads this to show the badge on the community tab globally.
+ * App-wide context that polls /api/friends/pending-count for incoming pending requests & unread messages.
+ * Provides `pendingCount`, `unreadMsgCount` and a `refresh()` function to any child component.
  */
 export function FriendNotifProvider({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const [pendingCount, setPendingCount] = useState(0);
+  const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchCount = useCallback(async () => {
@@ -38,6 +40,7 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
       if (res.ok) {
         const data = await res.json();
         setPendingCount(data.count ?? 0);
+        setUnreadMsgCount(data.unreadMsgCount ?? 0);
       }
     } catch {
       // silently ignore network errors
@@ -48,6 +51,7 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (status !== "authenticated") {
       setPendingCount(0);
+      setUnreadMsgCount(0);
       return;
     }
     fetchCount();
@@ -58,7 +62,9 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
   }, [status, fetchCount]);
 
   return (
-    <FriendNotifContext.Provider value={{ pendingCount, refresh: fetchCount }}>
+    <FriendNotifContext.Provider
+      value={{ pendingCount, unreadMsgCount, refresh: fetchCount }}
+    >
       {children}
     </FriendNotifContext.Provider>
   );

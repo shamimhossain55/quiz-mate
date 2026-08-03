@@ -33,12 +33,17 @@ import {
   Upload,
   Check,
   Layers,
+  Menu,
+  Crown,
+  UserCheck,
+  ChevronDown,
 } from "lucide-react";
 
 import {
   getAllStudents,
   addStudent,
   updateStudentStatus,
+  updateStudentRole,
   deleteStudent,
   getAllSubjects,
   addSubject,
@@ -126,8 +131,18 @@ const PRESET_BADGE_TAGS = [
 export default function AdminPage() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // RBAC & Role Management State
+  const [currentUserRole, setCurrentUserRole] = useState<
+    "super_admin" | "admin" | "moderator" | "content_creator"
+  >("super_admin");
+  const [roleModalUser, setRoleModalUser] = useState<AdminUser | null>(null);
+  const [selectedRole, setSelectedRole] = useState<
+    "super_admin" | "admin" | "moderator" | "content_creator" | "user"
+  >("user");
 
   // Firestore Data State
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -202,8 +217,22 @@ export default function AdminPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Load Real Data from Firestore on Mount
+  // Load Real Data & Admin Session from Firestore on Mount
   useEffect(() => {
+    async function loadSession() {
+      try {
+        const res = await fetch("/api/admin/session");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user?.role) {
+            setCurrentUserRole(data.user.role);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load admin session role", e);
+      }
+    }
+
     async function loadData() {
       setLoading(true);
       try {
@@ -231,8 +260,23 @@ export default function AdminPage() {
       }
     }
 
+    loadSession();
     loadData();
   }, []);
+
+  const handleUpdateRole = async (
+    userId: string,
+    newRole: "super_admin" | "admin" | "moderator" | "content_creator" | "user"
+  ) => {
+    try {
+      await updateStudentRole(userId, newRole);
+      setUsers(users.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
+      showToast(`ইউজার রোল পরিবর্তন করা হয়েছে: ${newRole.toUpperCase()} 🛡️`);
+      setRoleModalUser(null);
+    } catch (err) {
+      showToast("ত্রুটি: রোল পরিবর্তন করা যায়নি");
+    }
+  };
 
   // Update chapters when subject selected in dropdowns
   useEffect(() => {
@@ -685,16 +729,31 @@ export default function AdminPage() {
     }
   };
 
-  const navItems: NavItem[] = [
+  const allNavItems: NavItem[] = [
     { id: "dashboard", label: "ড্যাশবোর্ড", icon: LayoutDashboard },
     { id: "banners", label: "ব্যানার ক্যারোজেল", icon: Layers, badge: String(banners.length), badgeColor: "bg-teal-100 text-teal-800" },
     { id: "quizzes", label: "কুইজ ম্যানেজমেন্ট", icon: ListChecks, badge: String(quizzes.length), badgeColor: "bg-amber-100 text-amber-800" },
     { id: "questions", label: "প্রশ্ন ব্যাংক (Questions)", icon: HelpCircle, badge: String(questions.length), badgeColor: "bg-teal-100 text-teal-800" },
     { id: "subjects", label: "বিষয় ও অধ্যায়", icon: BookOpen, badge: String(subjects.length), badgeColor: "bg-indigo-100 text-indigo-800" },
-    { id: "users", label: "ইউজারস", icon: Users, badge: String(users.length), badgeColor: "bg-indigo-100 text-indigo-800" },
+    { id: "users", label: "ইউজারস ও পারমিশন", icon: Users, badge: String(users.length), badgeColor: "bg-indigo-100 text-indigo-800" },
     { id: "analytics", label: "অ্যানালিটিক্স", icon: BarChart3 },
     { id: "settings", label: "সেটিংস", icon: Settings },
   ];
+
+  const navItems = allNavItems.filter((item) => {
+    if (currentUserRole === "super_admin") return true;
+    if (currentUserRole === "admin") return item.id !== "settings";
+    if (currentUserRole === "moderator") return item.id !== "users" && item.id !== "settings";
+    if (currentUserRole === "content_creator") {
+      return (
+        item.id === "dashboard" ||
+        item.id === "quizzes" ||
+        item.id === "questions" ||
+        item.id === "subjects"
+      );
+    }
+    return true;
+  });
 
   const filteredQuestions = questions.filter((q) => {
     if (questionClassFilter !== "all" && q.classId !== questionClassFilter) return false;
@@ -714,20 +773,44 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* SIDEBAR */}
-      <aside className={`flex-shrink-0 flex flex-col bg-slate-900 border-r border-slate-800/80 transition-all duration-300 ${sidebarOpen ? "w-60" : "w-16"}`}>
-        <div className="flex items-center gap-2.5 px-4 py-5 border-b border-slate-800/80">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-teal-500 to-indigo-600 flex items-center justify-center shadow-lg flex-shrink-0">
-            <Zap width={16} height={16} className="text-white" />
-          </div>
-          {sidebarOpen && (
-            <div className="overflow-hidden">
-              <p className="text-sm font-black text-white leading-none">QuizMate</p>
-              <p className="text-[9px] font-bold text-teal-400 leading-none mt-0.5 flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Super Admin Hub
-              </p>
+      {/* MOBILE BACKDROP OVERLAY */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
+      {/* SIDEBAR (Desktop Fixed + Mobile Sliding Drawer) */}
+      <aside
+        className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col bg-slate-900 border-r border-slate-800/80 transition-all duration-300 ${
+          mobileSidebarOpen
+            ? "translate-x-0 w-64 shadow-2xl"
+            : "-translate-x-full md:translate-x-0"
+        } ${sidebarOpen ? "md:w-60" : "md:w-16"}`}
+      >
+        <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800/80">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-teal-500 to-indigo-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <Zap width={16} height={16} className="text-white" />
             </div>
-          )}
+            {(sidebarOpen || mobileSidebarOpen) && (
+              <div className="overflow-hidden">
+                <p className="text-sm font-black text-white leading-none">QuizMate Admin</p>
+                <p className="text-[9px] font-bold text-teal-400 leading-none mt-1 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {currentUserRole.toUpperCase().replace("_", " ")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="md:hidden text-slate-400 hover:text-white p-1 cursor-pointer"
+          >
+            <X width={18} height={18} />
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2 no-scrollbar">
@@ -737,14 +820,31 @@ export default function AdminPage() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveNav(item.id)}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl transition-all duration-200 text-left group ${
-                  isActive ? "bg-teal-600/20 text-teal-400 border border-teal-500/20 shadow-sm" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                onClick={() => {
+                  setActiveNav(item.id);
+                  setMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl transition-all duration-200 text-left group cursor-pointer ${
+                  isActive
+                    ? "bg-teal-600/20 text-teal-400 border border-teal-500/20 shadow-sm"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
                 }`}
               >
-                <Icon width={17} height={17} className={`flex-shrink-0 ${isActive ? "text-teal-400" : "text-slate-500 group-hover:text-slate-300"}`} />
-                {sidebarOpen && <span className="text-xs font-bold flex-1 truncate">{item.label}</span>}
-                {sidebarOpen && item.badge && <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${item.badgeColor}`}>{item.badge}</span>}
+                <Icon
+                  width={18}
+                  height={18}
+                  className={`flex-shrink-0 ${
+                    isActive ? "text-teal-400" : "text-slate-500 group-hover:text-slate-300"
+                  }`}
+                />
+                {(sidebarOpen || mobileSidebarOpen) && (
+                  <span className="text-xs font-bold flex-1 truncate">{item.label}</span>
+                )}
+                {(sidebarOpen || mobileSidebarOpen) && item.badge && (
+                  <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full ${item.badgeColor}`}>
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -753,12 +853,14 @@ export default function AdminPage() {
         <div className="border-t border-slate-800/80 p-3">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow">
-              <Shield width={14} height={14} className="text-white" />
+              <Crown width={14} height={14} className="text-amber-300" />
             </div>
-            {sidebarOpen && (
+            {(sidebarOpen || mobileSidebarOpen) && (
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-white truncate">শামীম হোসেন</p>
-                <p className="text-[9px] font-medium text-teal-400">Super Admin</p>
+                <p className="text-xs font-bold text-white truncate">অ্যাডমিন প্যানেল</p>
+                <p className="text-[9px] font-bold text-teal-400 capitalize">
+                  {currentUserRole.replace("_", " ")}
+                </p>
               </div>
             )}
           </div>
@@ -768,37 +870,53 @@ export default function AdminPage() {
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* TOP BAR */}
-        <header className="flex-shrink-0 flex items-center justify-between px-6 py-3.5 bg-slate-900/80 backdrop-blur-md border-b border-slate-800/80">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-all">
+        <header className="flex-shrink-0 flex items-center justify-between px-3 md:px-6 py-3 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 gap-2">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0">
+            {/* Hamburger Button on Mobile */}
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="md:hidden h-9 w-9 flex items-center justify-center rounded-xl bg-slate-800 text-slate-300 hover:text-white flex-shrink-0 cursor-pointer"
+              aria-label="Open Mobile Menu"
+            >
+              <Menu width={18} height={18} />
+            </button>
+
+            {/* Desktop Sidebar Toggle Button */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="hidden md:flex h-8 w-8 rounded-lg bg-slate-800 items-center justify-center text-slate-400 hover:text-white transition-all flex-shrink-0 cursor-pointer"
+            >
               <LayoutDashboard width={15} height={15} />
             </button>
-            <div>
-              <h1 className="text-sm font-black text-white leading-none">
+
+            <div className="min-w-0">
+              <h1 className="text-xs md:text-sm font-black text-white leading-none truncate">
                 {navItems.find((n) => n.id === activeNav)?.label ?? "ড্যাশবোর্ড"}
               </h1>
-              <p className="text-[10px] text-slate-500 font-medium mt-0.5">QuizMate সম্পূর্ণ কন্ট্রোল প্যানেল (Class/Subject/Chapter & Questions)</p>
+              <p className="text-[9px] text-slate-500 font-medium mt-0.5 hidden sm:block truncate">
+                QuizMate সম্পূর্ণ কন্ট্রোল প্যানেল & পারমিশন হাব
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative hidden sm:flex items-center">
+          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <div className="relative hidden lg:flex items-center">
               <Search width={13} height={13} className="absolute left-2.5 text-slate-500" />
               <input
                 type="text"
                 placeholder="প্রশ্ন বা বিষয় খুঁজুন..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-7 pr-3 py-1.5 text-[11px] bg-slate-800 border border-slate-700 rounded-lg text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50 w-44 transition-all"
+                className="pl-7 pr-3 py-1.5 text-[11px] bg-slate-800 border border-slate-700 rounded-lg text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50 w-36 xl:w-48 transition-all"
               />
             </div>
 
             <button
               onClick={() => setIsBulkUploadOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[11px] font-extrabold transition-all shadow-lg shadow-purple-600/20"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10.5px] font-extrabold transition-all shadow-lg shadow-purple-600/20 cursor-pointer"
             >
-              <Upload width={13} height={13} />
-              JSON Bulk Upload
+              <Upload width={12} height={12} />
+              <span className="hidden sm:inline">JSON Bulk</span>
             </button>
 
             <button
@@ -808,10 +926,21 @@ export default function AdminPage() {
                 else if (activeNav === "banners") handleOpenAddBanner();
                 else setIsAddQuizOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 rounded-lg text-white text-[11px] font-extrabold transition-all shadow-lg shadow-teal-600/20"
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-500 rounded-lg text-white text-[10.5px] font-extrabold transition-all shadow-lg shadow-teal-600/20 cursor-pointer"
             >
-              <Plus width={13} height={13} />
-              নতুন যোগ করুন
+              <Plus width={12} height={12} />
+              <span className="hidden sm:inline">নতুন যোগ</span>
+            </button>
+
+            <button
+              onClick={async () => {
+                await fetch("/api/admin/session", { method: "DELETE" });
+                window.location.href = "/login";
+              }}
+              className="h-8 px-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+              title="লগআউট"
+            >
+              <LogOut width={13} height={13} />
             </button>
           </div>
         </header>
@@ -1422,74 +1551,120 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* USERS TABLE */}
+              {/* USERS TABLE WITH RBAC ROLE MANAGEMENT */}
               {activeNav === "users" && (
                 <div className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80">
                     <div>
-                      <p className="text-sm font-extrabold text-white">ইউজার ম্যানেজমেন্ট ({users.length})</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Firebase স্টুডেন্ট রেকর্ডস</p>
+                      <p className="text-sm font-extrabold text-white">ইউজার ও রোল অ্যাক্সেস ম্যানেজমেন্ট ({users.length})</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">রোল-বেজড অ্যাক্সেস কন্ট্রোল (Super Admin / Admin / Moderator / Editor / User)</p>
                     </div>
-                    <button onClick={() => setIsAddUserOpen(true)} className="flex items-center gap-1 text-[10px] font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-lg hover:bg-teal-500/20 transition-all">
-                      <Plus width={10} height={10} /> ইউজার যোগ করুন
-                    </button>
+                    {currentUserRole === "super_admin" && (
+                      <button onClick={() => setIsAddUserOpen(true)} className="flex items-center gap-1 text-[10px] font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-lg hover:bg-teal-500/20 transition-all cursor-pointer">
+                        <Plus width={10} height={10} /> ইউজার যোগ করুন
+                      </button>
+                    )}
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[640px]">
                       <thead>
                         <tr className="border-b border-slate-800/60">
-                          {["ইউজার", "ক্লাস", "XP", "স্ট্রিক", "স্ট্যাটাস", "অ্যাকশন"].map((h) => (
+                          {["ইউজার", "ক্লাস", "XP / স্ট্রিক", "অ্যাডমিন রোল (Role)", "স্ট্যাটাস", "অ্যাকশন"].map((h) => (
                             <th key={h} className="px-4 py-2.5 text-left text-[9px] font-extrabold text-slate-500 uppercase tracking-widest">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {users.map((u, idx) => (
-                          <tr key={u.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 transition-colors group">
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-2.5">
-                                <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${["bg-teal-900 text-teal-300","bg-indigo-900 text-indigo-300","bg-rose-900 text-rose-300","bg-amber-900 text-amber-300"][idx % 4]}`}>
-                                  {u.name.slice(0, 1)}
+                        {users.map((u, idx) => {
+                          const userRole = u.role || (u.status === "active" ? "user" : "user");
+                          return (
+                            <tr key={u.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 transition-colors group">
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2.5">
+                                  <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${["bg-teal-900 text-teal-300","bg-indigo-900 text-indigo-300","bg-rose-900 text-rose-300","bg-amber-900 text-amber-300"][idx % 4]}`}>
+                                    {u.name.slice(0, 1)}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-white">{u.name}</p>
+                                    <p className="text-[9px] text-slate-500">{u.email}</p>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="text-xs font-bold text-white">{u.name}</p>
-                                  <p className="text-[9px] text-slate-500">{u.email}</p>
+                              </td>
+                              <td className="px-4 py-2.5 text-[11px] text-slate-400 font-medium">{u.class}</td>
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-2 text-[10px] font-black">
+                                  <span className="text-teal-400 flex items-center gap-0.5">
+                                    <Star width={9} height={9} className="fill-teal-400" /> {u.xp || 0}
+                                  </span>
+                                  <span className="text-orange-400 flex items-center gap-0.5">
+                                    <Flame width={9} height={9} className="fill-orange-400" /> {u.streak || 0}d
+                                  </span>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-2.5 text-[11px] text-slate-400 font-medium">{u.class}</td>
-                            <td className="px-4 py-2.5">
-                              <span className="text-[11px] font-black text-teal-400 flex items-center gap-0.5">
-                                <Star width={10} height={10} className="fill-teal-400" /> {u.xp}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <span className="text-[11px] font-black text-orange-400 flex items-center gap-0.5">
-                                <Flame width={10} height={10} className="fill-orange-400" /> {u.streak}d
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <button
-                                onClick={() => toggleUserStatus(u.id, u.status)}
-                                className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border transition-all ${
-                                  u.status === "active" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
-                                }`}
-                              >
-                                {u.status === "active" ? "• অ্যাক্টিভ" : "✕ ব্যানড"}
-                              </button>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => toggleUserStatus(u.id, u.status)} title="স্ট্যাটাস টগল" className="h-6 w-6 rounded-md bg-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-400 transition-all">
-                                  <RefreshCw width={11} height={11} />
+                              </td>
+
+                              {/* Role Badge Column */}
+                              <td className="px-4 py-2.5">
+                                {userRole === "super_admin" ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 w-fit shadow-xs">
+                                    <Crown width={10} height={10} className="text-amber-300 fill-amber-300" /> Super Admin
+                                  </span>
+                                ) : userRole === "admin" ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center gap-1 w-fit shadow-xs">
+                                    <Shield width={10} height={10} className="text-teal-400" /> Admin
+                                  </span>
+                                ) : userRole === "moderator" ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1 w-fit shadow-xs">
+                                    <Zap width={10} height={10} className="text-amber-400" /> Moderator
+                                  </span>
+                                ) : userRole === "content_creator" ? (
+                                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 w-fit shadow-xs">
+                                    <Edit3 width={10} height={10} className="text-indigo-400" /> Editor
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1 w-fit">
+                                    <Users width={9} height={9} /> User
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-2.5">
+                                <button
+                                  onClick={() => toggleUserStatus(u.id, u.status)}
+                                  className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                                    u.status === "active" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
+                                  }`}
+                                >
+                                  {u.status === "active" ? "• অ্যাক্টিভ" : "✕ ব্যানড"}
                                 </button>
-                                <button onClick={() => handleDeleteUser(u.id)} title="মুছে ফেলুন" className="h-6 w-6 rounded-md bg-slate-700 flex items-center justify-center text-slate-400 hover:text-rose-400 transition-all">
-                                  <Trash2 width={11} height={11} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+
+                              <td className="px-4 py-2.5">
+                                <div className="flex items-center gap-1.5">
+                                  {currentUserRole === "super_admin" && (
+                                    <button
+                                      onClick={() => {
+                                        setRoleModalUser(u);
+                                        setSelectedRole((u.role as any) || "user");
+                                      }}
+                                      title="রোল পরিবর্তন করুন"
+                                      className="px-2 py-1 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold hover:bg-purple-500 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Shield width={10} height={10} /> রোল
+                                    </button>
+                                  )}
+                                  <button onClick={() => toggleUserStatus(u.id, u.status)} title="স্ট্যাটাস টগল" className="h-6 w-6 rounded-md bg-slate-700 flex items-center justify-center text-slate-400 hover:text-amber-400 transition-all cursor-pointer">
+                                    <RefreshCw width={11} height={11} />
+                                  </button>
+                                  {currentUserRole === "super_admin" && (
+                                    <button onClick={() => handleDeleteUser(u.id)} title="মুছে ফেলুন" className="h-6 w-6 rounded-md bg-slate-700 flex items-center justify-center text-slate-400 hover:text-rose-400 transition-all cursor-pointer">
+                                      <Trash2 width={11} height={11} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2504,6 +2679,83 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ROLE CHANGE MODAL (SUPER ADMIN ONLY) ===== */}
+      {roleModalUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-5 space-y-4 shadow-2xl relative">
+            <button
+              onClick={() => setRoleModalUser(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-all"
+            >
+              <X width={18} height={18} />
+            </button>
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Shield className="text-purple-400" width={20} height={20} />
+              <div>
+                <h3 className="text-sm font-extrabold text-white">ইউজার ভূমিকা (Role) পরিবর্তন</h3>
+                <p className="text-[10px] text-slate-400">অ্যাডমিন পারমিশন ও এক্সেস লেভেল কন্ট্রোল</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-800/60 rounded-2xl p-3 border border-slate-800">
+              <p className="text-xs font-black text-white">{roleModalUser.name}</p>
+              <p className="text-[10px] text-slate-400">{roleModalUser.email}</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-extrabold text-slate-400">নতুন ভূমিকা নির্ধারণ করুন:</label>
+              {[
+                { id: "super_admin", title: "👑 Super Admin", desc: "পূর্ণ সিস্টেম অ্যাক্সেস, ইউজার ভূমিকা ও সেটিংস পরিবর্তন" },
+                { id: "admin", title: "🛡️ Admin", desc: "ইউজার ব্যানিং, কুইজ, বিষয় ও ব্যানার পরিচালনা (সেটিংস নয়)" },
+                { id: "moderator", title: "⚡ Moderator", desc: "কুইজ, প্রশ্ন ব্যাংক ও ব্যানার তৈরি/সম্পাদনা (ইউজার ব্যানিং নয়)" },
+                { id: "content_creator", title: "✍️ Content Editor", desc: "শুধু কুইজ, বিষয় ও প্রশ্ন ব্যাংক তৈরি/সম্পাদনা" },
+                { id: "user", title: "👤 General Student", desc: "সাধারণ শিক্ষার্থী অ্যাক্সেস" },
+              ].map((r) => (
+                <label
+                  key={r.id}
+                  onClick={() => setSelectedRole(r.id as any)}
+                  className={`flex items-start gap-3 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    selectedRole === r.id
+                      ? "bg-purple-600/20 border-purple-500/80 text-white ring-1 ring-purple-500/30"
+                      : "bg-slate-800/40 border-slate-800/80 text-slate-400 hover:bg-slate-800"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="userRole"
+                    checked={selectedRole === r.id}
+                    onChange={() => setSelectedRole(r.id as any)}
+                    className="mt-0.5 accent-purple-500"
+                  />
+                  <div>
+                    <p className="text-xs font-black">{r.title}</p>
+                    <p className="text-[9.5px] opacity-75 leading-tight mt-0.5">{r.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setRoleModalUser(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition-all"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateRole(roleModalUser.id, selectedRole)}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-extrabold shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
+              >
+                <Check width={14} height={14} />
+                রোল সেভ করুন
+              </button>
+            </div>
           </div>
         </div>
       )}
