@@ -7,6 +7,7 @@ import { QuizConfigProvider } from "@/context/QuizConfigContext";
 import { QuizSessionProvider } from "@/context/QuizSessionContext";
 import { QuizTimerProvider } from "@/context/QuizTimerContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { FriendNotifProvider } from "@/context/FriendNotifContext";
 
 export function Providers({
   children,
@@ -15,17 +16,19 @@ export function Providers({
 }) {
   return (
     <SessionProvider>
-      <LanguageProvider>
-        <QuizConfigProvider>
-          <QuizSessionProvider>
-            <QuizProvider>
-              <QuizTimerProvider>
-                {children}
-              </QuizTimerProvider>
-            </QuizProvider>
-          </QuizSessionProvider>
-        </QuizConfigProvider>
-      </LanguageProvider>
+      <FriendNotifProvider>
+        <LanguageProvider>
+          <QuizConfigProvider>
+            <QuizSessionProvider>
+              <QuizProvider>
+                <QuizTimerProvider>
+                  {children}
+                </QuizTimerProvider>
+              </QuizProvider>
+            </QuizSessionProvider>
+          </QuizConfigProvider>
+        </LanguageProvider>
+      </FriendNotifProvider>
     </SessionProvider>
   );
 }

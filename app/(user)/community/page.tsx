@@ -1,0 +1,635 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import {
+  MessageCircle,
+  Swords,
+  Search,
+  UserPlus,
+  Users,
+  Zap,
+  Crown,
+  Flame,
+  Trophy,
+  Circle,
+  Check,
+  X,
+  Loader2,
+  UserCheck,
+  Bell,
+  RefreshCw,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import BottomNav from "@/components/layout/BottomNav";
+import UserSearchSheet from "@/components/community/UserSearchSheet";
+import IncomingRequestsModal from "@/components/community/IncomingRequestsModal";
+import ChatInbox from "@/components/community/ChatInbox";
+
+/**
+ * Premium Community Page
+ * ফায়ারবেস থেকে real friends list, incoming/outgoing requests লোড করে।
+ */
+
+type Friend = {
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+  className?: string;
+  isOnline?: boolean;
+  point: number;
+  streak: number;
+  level: number;
+  customUid?: string;
+};
+
+type FriendRequest = {
+  id: string;
+  senderEmail: string;
+  senderName: string;
+  senderAvatar?: string | null;
+  senderUid?: string;
+  receiverEmail: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+};
+
+// অ্যাভাটার কালার ম্যাপ
+const avatarColors = [
+  { bg: "bg-teal-100", text: "text-teal-800", ring: "ring-teal-200" },
+  { bg: "bg-indigo-100", text: "text-indigo-800", ring: "ring-indigo-200" },
+  { bg: "bg-rose-100", text: "text-rose-800", ring: "ring-rose-200" },
+  { bg: "bg-amber-100", text: "text-amber-800", ring: "ring-amber-200" },
+  { bg: "bg-emerald-100", text: "text-emerald-800", ring: "ring-emerald-200" },
+  { bg: "bg-violet-100", text: "text-violet-800", ring: "ring-violet-200" },
+];
+
+function colorFor(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + h * 31;
+  return avatarColors[Math.abs(h) % avatarColors.length];
+}
+
+export default function CommunityPage() {
+  const router = useRouter();
+
+  // ── Data state ─────────────────────────────────
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
+  const [outgoingEmails, setOutgoingEmails] = useState<Set<string>>(new Set());
+  const [friendEmails, setFriendEmails] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
+
+  // ── UI state ────────────────────────────────────
+  const [showSearch, setShowSearch] = useState(false);
+  const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
+  // Chat Inbox
+  const [chatFriend, setChatFriend] = useState<Friend | null>(null);
+
+  function showToast(msg: string, type: "ok" | "err" = "ok") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  // ── Load from Firebase via API ──────────────────
+  const loadData = useCallback(async () => {
+    try {
+      const res = await fetch("/api/friends");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const rawFriends: Friend[] = (data.friends || []).map((f: any) => ({
+        email: f.email,
+        name: f.name || "শিক্ষার্থী",
+        avatarUrl: f.avatarUrl || null,
+        className: f.className || "",
+        isOnline: false, // presence feature হবে পরে
+        point: f.point || 0,
+        streak: f.streak || 1,
+        level: f.level || 1,
+        customUid: f.customUid || "",
+      }));
+      setFriends(rawFriends);
+      setFriendEmails(new Set(rawFriends.map((f) => f.email.toLowerCase())));
+
+      setIncomingRequests(data.incomingRequests || []);
+
+      const outgoing: Set<string> = new Set(
+        (data.outgoingRequests || []).map((r: any) => r.receiverEmail?.toLowerCase())
+      );
+      setOutgoingEmails(outgoing);
+    } catch (e) {
+      console.error("Failed to load community data:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // ── Respond to friend request ───────────────────
+  async function handleRespond(requestId: string, action: "accept" | "decline") {
+    setRespondingId(requestId);
+    try {
+      const res = await fetch("/api/friends/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, action }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(
+          action === "accept" ? "বন্ধু যুক্ত হয়েছে! 🎉" : "রিকোয়েস্ট বাতিল করা হয়েছে",
+          "ok"
+        );
+        // Optimistic remove from list
+        setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+        if (action === "accept") loadData(); // refresh friends list
+      } else {
+        showToast(data.error || "একটি সমস্যা হয়েছে", "err");
+      }
+    } catch {
+      showToast("সার্ভার সমস্যা", "err");
+    } finally {
+      setRespondingId(null);
+    }
+  }
+
+  // ── Derived ─────────────────────────────────────
+  const totalXP = friends.reduce((s, f) => s + f.point, 0);
+  const pendingCount = incomingRequests.length;
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex flex-col bg-slate-50">
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <Loader2 width={28} height={28} className="animate-spin text-teal-600" />
+          <p className="text-xs font-bold text-slate-400">লোড হচ্ছে...</p>
+        </div>
+        <BottomNav activeTab="community" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen font-sans flex flex-col bg-slate-50 relative overflow-hidden selection:bg-teal-500 selection:text-white">
+      {/* অ্যাম্বিয়েন্ট গ্লোয়িং ব্যাকগ্রাউন্ড */}
+      <div className="absolute -top-16 -left-16 w-72 h-72 rounded-full bg-violet-400/15 blur-3xl pointer-events-none animate-ambient-float" />
+      <div className="absolute top-1/3 -right-20 w-80 h-80 rounded-full bg-teal-400/15 blur-3xl pointer-events-none animate-ambient-float" style={{ animationDelay: "-3s" }} />
+      <div className="absolute bottom-20 left-10 w-60 h-60 rounded-full bg-rose-400/10 blur-3xl pointer-events-none animate-ambient-float" style={{ animationDelay: "-1.5s" }} />
+
+      <div className="mx-auto w-full max-w-sm flex flex-col flex-1 min-h-0 relative z-10">
+
+        {/* ── Header ─────────────────────────────── */}
+        <div className="flex-shrink-0 px-5 pt-5 pb-2 relative z-20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-violet-100/80 text-violet-700 flex items-center justify-center border border-violet-200/60 shadow-2xs">
+                <Users width={20} height={20} />
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-none">
+                  কমিউনিটি
+                </h1>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  {friends.length} জন বন্ধু
+                  {pendingCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center gap-0.5 text-rose-500 font-bold">
+                      · {pendingCount} নতুন রিকোয়েস্ট
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {/* Refresh */}
+              <button
+                onClick={() => { setIsLoading(true); loadData(); }}
+                aria-label="রিফ্রেশ"
+                className="h-9 w-9 flex items-center justify-center rounded-xl bg-white/90 border border-slate-200/80 active:scale-95 transition-all hover:shadow-sm shadow-2xs cursor-pointer"
+              >
+                <RefreshCw width={15} height={15} className="text-slate-500" />
+              </button>
+
+              {/* Search button (UID search) */}
+              <button
+                onClick={() => setShowSearch(true)}
+                aria-label="বন্ধু খুঁজুন"
+                className="h-9 w-9 flex items-center justify-center rounded-xl bg-white/90 border border-slate-200/80 text-slate-700 active:scale-95 transition-all hover:bg-slate-100 shadow-2xs cursor-pointer"
+              >
+                <Search width={16} height={16} />
+              </button>
+
+              {/* Friend Requests icon button with Count Badge */}
+              <button
+                onClick={() => setShowRequestsModal(true)}
+                aria-label="ফ্রেন্ড রিকোয়েস্ট সমূহ"
+                className="relative h-9 w-9 flex items-center justify-center rounded-xl bg-teal-700 text-white active:scale-95 transition-all hover:bg-teal-800 shadow-md cursor-pointer"
+              >
+                <UserPlus width={16} height={16} />
+                {pendingCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center px-[3px] border-2 border-white shadow-sm animate-pulse">
+                    {pendingCount > 9 ? "9+" : pendingCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Scrollable Content ──────────────────── */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-1 pb-6 space-y-4 no-scrollbar">
+
+          {/* Toast */}
+          <AnimatePresence>
+            {toast && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className={`rounded-xl px-4 py-2.5 text-xs font-extrabold text-center shadow-md ${
+                  toast.type === "ok"
+                    ? "bg-teal-600 text-white"
+                    : "bg-rose-500 text-white"
+                }`}
+              >
+                {toast.msg}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── 1v1 Battle CTA ─────────────────── */}
+          <div
+            className="rounded-2xl p-3.5 relative overflow-hidden shadow-[0_8px_20px_rgba(99,102,241,0.18)] border border-white/30 group cursor-pointer active:scale-[0.99] transition-all"
+            style={{ background: "linear-gradient(135deg, #6366F1 0%, #8B5CF6 55%, #A855F7 100%)" }}
+            onClick={() => router.push("/quiz/setup")}
+          >
+            <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-lg pointer-events-none" />
+            <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-violet-300/20 blur-md pointer-events-none" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Swords width={16} height={16} className="text-amber-300" />
+                  <span className="text-[10px] font-extrabold text-violet-200 uppercase tracking-wider">১v১ কুইজ ব্যাটেল</span>
+                </div>
+                <h3 className="text-base font-extrabold text-white leading-snug">বন্ধুকে চ্যালেঞ্জ করো!</h3>
+                <p className="text-[10px] text-violet-200 font-medium mt-0.5">একটি বিষয় বেছে নাও আর রিয়েল-টাইমে লড়াই করো ⚔️</p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-md group-hover:scale-110 transition-transform">
+                <Swords width={22} height={22} className="text-white" />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Incoming Friend Requests — Facebook Style ── */}
+          <AnimatePresence>
+            {incomingRequests.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-6 w-6 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center">
+                    <Bell width={12} height={12} className="text-rose-500" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">
+                    Friend Requests
+                  </p>
+                  <span className="ml-auto text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500 text-white">
+                    {incomingRequests.length}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {incomingRequests.map((req) => {
+                    const ac = colorFor(req.senderName);
+                    const isResponding = respondingId === req.id;
+                    return (
+                      <motion.div
+                        key={req.id}
+                        layout
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10, height: 0 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                        className="rounded-2xl bg-white border border-slate-200/80 p-3 flex items-center gap-3"
+                        style={{ boxShadow: "0 2px 12px rgba(15,23,42,0.05)" }}
+                      >
+                        {/* Avatar */}
+                        <div className="relative flex-shrink-0">
+                          <div className={`h-12 w-12 rounded-full ${ac.bg} ring-2 ${ac.ring} flex items-center justify-center overflow-hidden`}>
+                            {req.senderAvatar ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={req.senderAvatar} alt={req.senderName} className="h-full w-full object-cover" />
+                            ) : (
+                              <span className={`${ac.text} font-extrabold text-lg`}>
+                                {req.senderName.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Info + Buttons */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[13px] font-extrabold text-slate-900 truncate leading-tight">
+                                {req.senderName}
+                              </p>
+                              {req.senderUid && (
+                                <p className="text-[9px] font-bold text-teal-700 mt-0.5">
+                                  #{req.senderUid}
+                                </p>
+                              )}
+                              <p className="text-[9px] text-slate-400 font-medium mt-0.5">
+                                {new Date(req.createdAt).toLocaleDateString("bn-BD", {
+                                  day: "numeric",
+                                  month: "short",
+                                })} আগে
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons — Facebook Style */}
+                          <div className="flex gap-2 mt-2">
+                            <button
+                              onClick={() => handleRespond(req.id, "accept")}
+                              disabled={isResponding}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-teal-600 text-white text-[11px] font-extrabold active:scale-95 transition-all disabled:opacity-60 shadow-sm hover:bg-teal-700"
+                            >
+                              {isResponding ? (
+                                <Loader2 width={12} height={12} className="animate-spin" />
+                              ) : (
+                                <UserCheck width={12} height={12} />
+                              )}
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => handleRespond(req.id, "decline")}
+                              disabled={isResponding}
+                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-slate-200 text-slate-700 text-[11px] font-extrabold active:scale-95 transition-all disabled:opacity-60 hover:bg-slate-300"
+                            >
+                              <X width={12} height={12} />
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Online Friends Carousel ────────── */}
+          {friends.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Circle width={7} height={7} className="fill-emerald-500 text-emerald-500 animate-pulse" />
+                  <p className="text-xs font-bold text-slate-700 tracking-wide">
+                    বন্ধুরা ({friends.length})
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+                {friends.map((friend, idx) => {
+                  const ac = colorFor(friend.name);
+                  return (
+                    <div
+                      key={friend.email}
+                      className="flex flex-col items-center gap-1 min-w-[68px] cursor-pointer group"
+                      onClick={() => setChatFriend(friend)}
+                    >
+                      <div className="relative">
+                        <div className={`h-14 w-14 rounded-full ${ac.bg} ring-2 ${ac.ring} flex items-center justify-center overflow-hidden shadow-sm group-hover:scale-105 transition-transform`}>
+                          {friend.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={friend.avatarUrl} alt={friend.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className={`${ac.text} font-extrabold text-lg`}>
+                              {friend.name.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        {/* Message indicator dot */}
+                        <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-teal-500 border-2 border-white flex items-center justify-center shadow-xs">
+                          <MessageCircle width={10} height={10} className="text-white" />
+                        </div>
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-700 text-center leading-tight line-clamp-1 max-w-[68px]">
+                        {friend.name.split(" ")[0]}
+                      </p>
+                      <span className="text-[8px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded-full border border-teal-100">
+                        {friend.point} XP
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Add Friend button */}
+                <div
+                  className="flex flex-col items-center gap-1 min-w-[68px] cursor-pointer group"
+                  onClick={() => setShowSearch(true)}
+                >
+                  <div className="h-14 w-14 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center group-hover:border-teal-400 group-hover:bg-teal-50 transition-all">
+                    <UserPlus width={20} height={20} className="text-slate-400 group-hover:text-teal-600 transition-colors" />
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 text-center leading-tight">যোগ করুন</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Community Stats ─────────────────── */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-white border border-slate-200/80 p-2.5 flex flex-col items-center shadow-[0_1px_4px_rgba(15,23,42,0.03)]">
+              <Trophy width={16} height={16} className="text-amber-500 mb-1" />
+              <span className="text-sm font-black text-slate-900">{friends.length}</span>
+              <span className="text-[8px] font-bold text-slate-400 mt-0.5">বন্ধু</span>
+            </div>
+            <div className="rounded-xl bg-white border border-slate-200/80 p-2.5 flex flex-col items-center shadow-[0_1px_4px_rgba(15,23,42,0.03)]">
+              <Zap width={16} height={16} className="text-teal-600 mb-1" />
+              <span className="text-sm font-black text-slate-900">{totalXP}</span>
+              <span className="text-[8px] font-bold text-slate-400 mt-0.5">টোটাল XP</span>
+            </div>
+            <div className="rounded-xl bg-white border border-slate-200/80 p-2.5 flex flex-col items-center shadow-[0_1px_4px_rgba(15,23,42,0.03)]">
+              <Bell width={16} height={16} className="text-rose-500 mb-1" />
+              <span className="text-sm font-black text-slate-900">{pendingCount}</span>
+              <span className="text-[8px] font-bold text-slate-400 mt-0.5">রিকোয়েস্ট</span>
+            </div>
+          </div>
+
+          {/* ── Full Friends List ───────────────── */}
+          {friends.length > 0 ? (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-slate-700 tracking-wide">সব বন্ধু</p>
+                <span className="text-[10px] font-semibold text-slate-400">{friends.length} জন</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {friends.map((friend, idx) => (
+                  <FriendCard
+                    key={friend.email}
+                    friend={friend}
+                    colorIdx={idx}
+                    onChallenge={() => router.push("/quiz/setup")}
+                    onMessage={() => setChatFriend(friend)}
+                    onNameClick={() => setChatFriend(friend)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Empty state */
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-16 w-16 rounded-2xl bg-teal-50 flex items-center justify-center mb-3">
+                <Users width={28} height={28} className="text-teal-500" />
+              </div>
+              <p className="text-sm font-bold text-slate-700 mb-1">এখনো কোনো বন্ধু নেই</p>
+              <p className="text-[11px] text-slate-400 max-w-[200px] mb-4">
+                Search icon চাপো এবং UID দিয়ে বন্ধু খুঁজে রিকোয়েস্ট পাঠাও!
+              </p>
+              <button
+                onClick={() => setShowSearch(true)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 text-white text-xs font-extrabold shadow-md active:scale-95 transition-all hover:bg-teal-700"
+              >
+                <UserPlus width={14} height={14} />
+                বন্ধু খুঁজুন
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── User Search Sheet ──────────────────── */}
+      <UserSearchSheet
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+        friendEmails={friendEmails}
+        pendingOutgoing={outgoingEmails}
+        onRequestSent={() => {
+          loadData();
+          showToast("ফ্রেন্ড রিকোয়েস্ট পাঠানো হয়েছে! 🎉");
+        }}
+      />
+
+      {/* ── Incoming Requests Modal ────────────── */}
+      <IncomingRequestsModal
+        isOpen={showRequestsModal}
+        onClose={() => setShowRequestsModal(false)}
+        requests={incomingRequests}
+        onRespond={handleRespond}
+        respondingId={respondingId}
+      />
+
+      {/* ── Chat Inbox (Messenger-style) ────────── */}
+      <ChatInbox
+        isOpen={chatFriend !== null}
+        friend={chatFriend}
+        onClose={() => setChatFriend(null)}
+      />
+
+      {/* ── BottomNav — badge shows pending count ─ */}
+      <BottomNav
+        activeTab="community"
+        badgeCounts={{ community: pendingCount }}
+      />
+    </div>
+  );
+}
+
+/**
+ * FriendCard
+ * প্রিমিয়াম ফ্রেন্ড কার্ড — অ্যাভাটার, স্ট্যাটাস, লেভেল, স্ট্রিক, মেসেজ ও চ্যালেঞ্জ বাটন
+ */
+function FriendCard({
+  friend,
+  colorIdx,
+  onMessage,
+  onChallenge,
+  onNameClick,
+}: {
+  friend: Friend;
+  colorIdx: number;
+  onMessage: () => void;
+  onChallenge: () => void;
+  onNameClick?: () => void;
+}) {
+  const ac = colorFor(friend.name);
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl pl-3 pr-2.5 py-2.5 bg-white border border-slate-200/80 shadow-[0_2px_8px_rgba(15,23,42,0.04)] hover:shadow-md transition-all duration-200 active:scale-[0.99]">
+      {/* অ্যাভাটার — click করলে inbox খুলবে */}
+      <div
+        className="relative flex-shrink-0 cursor-pointer"
+        onClick={onNameClick}
+      >
+        <div className={`h-10 w-10 rounded-full ${ac.bg} ring-2 ${ac.ring} flex items-center justify-center overflow-hidden shadow-2xs hover:scale-105 transition-transform`}>
+          {friend.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={friend.avatarUrl} alt={friend.name} className="h-full w-full object-cover" />
+          ) : (
+            <span className={`${ac.text} font-extrabold text-sm`}>
+              {friend.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ইউজার তথ্য */}
+      <div className="flex-1 min-w-0" onClick={onNameClick} style={{ cursor: "pointer" }}>
+        <div className="flex items-center gap-1">
+          <p className="text-xs font-extrabold text-slate-900 truncate hover:text-teal-700 transition-colors">{friend.name}</p>
+          <span className="text-[8px] font-extrabold px-1 py-0.2 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+            Lvl {friend.level}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {friend.customUid && (
+            <>
+              <span className="text-[9px] font-bold text-teal-700">#{friend.customUid}</span>
+              <span className="text-[9px] text-slate-300">•</span>
+            </>
+          )}
+          <span className="text-[9px] font-bold text-teal-700">{friend.point} XP</span>
+          {friend.streak > 0 && (
+            <>
+              <span className="text-[9px] text-slate-300">•</span>
+              <span className="flex items-center gap-0.5 text-[8px] font-bold text-orange-600">
+                <Flame width={9} height={9} className="fill-orange-500 text-orange-500" />
+                {friend.streak}d
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* অ্যাকশন বাটনস */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button
+          aria-label="মেসেজ পাঠান"
+          onClick={onMessage}
+          className="h-8 w-8 flex items-center justify-center rounded-lg bg-teal-50 border border-teal-100 active:scale-95 transition-all hover:bg-teal-100"
+        >
+          <MessageCircle width={14} height={14} className="text-teal-700" />
+        </button>
+        <button
+          aria-label="১v১ চ্যালেঞ্জ পাঠান"
+          onClick={onChallenge}
+          className="h-8 px-2.5 flex items-center justify-center gap-1 rounded-lg bg-gradient-to-r from-violet-600 to-indigo-600 text-white active:scale-95 transition-all hover:shadow-md text-[10px] font-extrabold shadow-sm"
+        >
+          <Swords width={12} height={12} />
+          ব্যাটেল
+        </button>
+      </div>
+    </div>
+  );
+}

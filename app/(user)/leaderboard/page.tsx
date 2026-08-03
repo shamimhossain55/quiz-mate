@@ -22,6 +22,8 @@ import {
   SlidersHorizontal,
   Check,
   X,
+  UserPlus,
+  Loader2,
 } from "lucide-react";
 import BottomNav from "@/components/layout/BottomNav";
 import { getTopStudents, getStudentProfile } from "@/lib/firestore/student";
@@ -242,6 +244,11 @@ export default function LeaderboardPage() {
   const [currentUserProfile, setCurrentUserProfile] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Friend states
+  const [friendEmails, setFriendEmails] = useState<Set<string>>(new Set());
+  const [outgoingRequests, setOutgoingRequests] = useState<Set<string>>(new Set());
+  const [sendingEmails, setSendingEmails] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -280,6 +287,20 @@ export default function LeaderboardPage() {
         if (session?.user?.email) {
           const profile = await getStudentProfile(session.user.email);
           if (profile) setCurrentUserProfile(profile);
+
+          // Fetch friends status
+          try {
+            const fRes = await fetch("/api/friends");
+            if (fRes.ok) {
+              const fData = await fRes.json();
+              setFriendEmails(
+                new Set((fData.friends || []).map((f: any) => f.email?.toLowerCase()))
+              );
+              setOutgoingRequests(
+                new Set((fData.outgoingRequests || []).map((r: any) => r.receiverEmail?.toLowerCase()))
+              );
+            }
+          } catch {}
         }
       } catch (e) {
         console.error("Leaderboard error:", e);
@@ -289,6 +310,36 @@ export default function LeaderboardPage() {
     }
     loadData();
   }, [session]);
+
+  const handleSendFriendRequest = async (player: Player, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const targetEmail = player.email.toLowerCase();
+    if (
+      friendEmails.has(targetEmail) ||
+      outgoingRequests.has(targetEmail) ||
+      sendingEmails.has(targetEmail)
+    )
+      return;
+
+    setSendingEmails((prev) => new Set(prev).add(targetEmail));
+    try {
+      const res = await fetch("/api/friends/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUid: player.customUid || player.email }),
+      });
+      if (res.ok) {
+        setOutgoingRequests((prev) => new Set(prev).add(targetEmail));
+      }
+    } catch {
+    } finally {
+      setSendingEmails((prev) => {
+        const next = new Set(prev);
+        next.delete(targetEmail);
+        return next;
+      });
+    }
+  };
 
   const currentUserEmail = session?.user?.email?.toLowerCase() || "";
   const currentUserAvatarKey = currentUserEmail ? `qm_avatar_${currentUserEmail}` : null;
@@ -610,16 +661,23 @@ export default function LeaderboardPage() {
                   </span>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  {rest.map((player, idx) => (
-                    <RankRow
-                      key={player.uid}
-                      player={player}
-                      rank={idx + 4}
-                      isCurrentUser={player.email.toLowerCase() === currentUserEmail}
-                      currentUserAvatarKey={currentUserAvatarKey}
-                      onPress={() => router.push(`/users/${encodeURIComponent(player.uid)}`)}
-                    />
-                  ))}
+                  {rest.map((player, idx) => {
+                    const pEmail = player.email.toLowerCase();
+                    return (
+                      <RankRow
+                        key={player.uid}
+                        player={player}
+                        rank={idx + 4}
+                        isCurrentUser={pEmail === currentUserEmail}
+                        currentUserAvatarKey={currentUserAvatarKey}
+                        onPress={() => router.push(`/users/${encodeURIComponent(player.uid)}`)}
+                        isFriend={friendEmails.has(pEmail)}
+                        isOutgoing={outgoingRequests.has(pEmail)}
+                        isSending={sendingEmails.has(pEmail)}
+                        onSendRequest={(e) => handleSendFriendRequest(player, e)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -824,12 +882,20 @@ function RankRow({
   isCurrentUser,
   currentUserAvatarKey,
   onPress,
+  isFriend,
+  isOutgoing,
+  isSending,
+  onSendRequest,
 }: {
   player: Player;
   rank: number;
   isCurrentUser: boolean;
   currentUserAvatarKey?: string | null;
   onPress?: () => void;
+  isFriend?: boolean;
+  isOutgoing?: boolean;
+  isSending?: boolean;
+  onSendRequest?: (e: React.MouseEvent) => void;
 }) {
   const avatarSrc =
     player.avatarUrl ||
@@ -850,7 +916,7 @@ function RankRow({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onPress?.()}
-      className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+      className={`flex items-center gap-2 rounded-xl px-3 py-2.5 border transition-all duration-200 cursor-pointer active:scale-[0.98] ${
         isCurrentUser
           ? "border-teal-500/50 shadow-[0_4px_16px_rgba(20,184,166,0.18)]"
           : "border-white/5 hover:border-white/10 hover:bg-white/5"
@@ -920,7 +986,7 @@ function RankRow({
       <RankChangeBadge curr={rank} prev={player.prevRank} />
 
       {/* XP */}
-      <div className="text-right flex-shrink-0 min-w-[40px]">
+      <div className="text-right flex-shrink-0 min-w-[36px]">
         <p
           className={`text-xs font-black ${
             isCurrentUser ? "text-teal-300" : rank <= 3 ? "text-amber-400" : "text-slate-300"
@@ -930,6 +996,37 @@ function RankRow({
         </p>
         <p className="text-[8px] text-slate-600 font-bold uppercase">XP</p>
       </div>
+
+      {/* Add Friend button */}
+      {!isCurrentUser && (
+        <button
+          onClick={onSendRequest}
+          disabled={isFriend || isOutgoing || isSending}
+          title={isFriend ? "ইতোমধ্যে বন্ধু" : isOutgoing ? "রিকোয়েস্ট পাঠানো হয়েছে" : "ফ্রেন্ড রিকোয়েস্ট পাঠান"}
+          className="h-7 w-7 rounded-lg flex items-center justify-center border transition-all active:scale-90 flex-shrink-0 cursor-pointer disabled:opacity-80"
+          style={{
+            background: isFriend
+              ? "rgba(16,185,129,0.15)"
+              : isOutgoing
+              ? "rgba(100,116,139,0.2)"
+              : "rgba(20,184,166,0.15)",
+            borderColor: isFriend
+              ? "rgba(16,185,129,0.3)"
+              : isOutgoing
+              ? "rgba(100,116,139,0.3)"
+              : "rgba(20,184,166,0.3)",
+            color: isFriend ? "#34d399" : isOutgoing ? "#94a3b8" : "#2dd4bf",
+          }}
+        >
+          {isSending ? (
+            <Loader2 width={12} height={12} className="animate-spin" />
+          ) : isFriend || isOutgoing ? (
+            <Check width={12} height={12} />
+          ) : (
+            <UserPlus width={12} height={12} />
+          )}
+        </button>
+      )}
     </div>
   );
 }

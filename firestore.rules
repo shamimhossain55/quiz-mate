@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Existing collections (unchanged) ─────────────────────────────────
+    match /students/{email} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /friends/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /friend_requests/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /subjects/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /classes/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /banners/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /chapters/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /quizzes/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /results/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── Conversations (DM Messaging) ──────────────────────────────────────
+    // convId format: "email1@example.com__email2@example.com" (sorted alphabetically)
+    // All writes go through the server-side Admin SDK (/api/messages POST),
+    // so client-side writes are blocked here.
+    // Reads are allowed so the real-time poll can fetch messages.
+    match /conversations/{convId} {
+      // Allow read on conversation metadata
+      allow read: if true;
+      allow write: if false; // Server Admin SDK only
+
+      match /messages/{msgId} {
+        // Allow read so client can poll messages
+        allow read: if true;
+        // Block all client writes — only server Admin SDK can write
+        allow write: if false;
+      }
+    }
+
+    // Block everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

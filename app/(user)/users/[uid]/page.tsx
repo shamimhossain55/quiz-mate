@@ -22,6 +22,7 @@ import {
   Heart,
   Copy,
   Check,
+  Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -178,6 +179,57 @@ export default function PublicProfilePage({
       })
       .catch(() => {});
   }, [uid, student?.uid]);
+
+  // Friend status
+  const [friendStatus, setFriendStatus] = useState<"none" | "sending" | "sent" | "friend">("none");
+  const [friendToast, setFriendToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!student) return;
+    fetch("/api/friends")
+      .then((r) => r.json())
+      .then((data) => {
+        const targetEmail = (student.uid || uid).toLowerCase();
+        const isFriend = (data.friends || []).some((f: any) => f.email?.toLowerCase() === targetEmail);
+        if (isFriend) {
+          setFriendStatus("friend");
+          return;
+        }
+        const isOutgoing = (data.outgoingRequests || []).some(
+          (r: any) => r.receiverEmail?.toLowerCase() === targetEmail
+        );
+        if (isOutgoing) {
+          setFriendStatus("sent");
+        }
+      })
+      .catch(() => {});
+  }, [student, uid]);
+
+  const handleSendFriendRequest = async () => {
+    if (friendStatus !== "none") return;
+    setFriendStatus("sending");
+    try {
+      const res = await fetch("/api/friends/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUid: student?.customUid || student?.uid || uid }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setFriendStatus("sent");
+        setFriendToast("ফ্রেন্ড রিকোয়েস্ট পাঠানো হয়েছে! 🎉");
+        setTimeout(() => setFriendToast(null), 3000);
+      } else {
+        setFriendStatus("none");
+        setFriendToast(data.error || "রিকোয়েস্ট পাঠানো যায়নি");
+        setTimeout(() => setFriendToast(null), 3000);
+      }
+    } catch {
+      setFriendStatus("none");
+      setFriendToast("একটি সমস্যা হয়েছে");
+      setTimeout(() => setFriendToast(null), 3000);
+    }
+  };
 
   const toggleLike = useCallback(async () => {
     const target = student?.uid || uid;
@@ -472,19 +524,58 @@ export default function PublicProfilePage({
                   {!isOwnProfile && (
                     <button
                       id="add-friend-btn"
-                      onClick={() => router.push("/community")}
+                      onClick={handleSendFriendRequest}
+                      disabled={friendStatus === "sending" || friendStatus === "sent" || friendStatus === "friend"}
                       aria-label="বন্ধু যোগ করুন"
-                      className="flex items-center gap-0.5 text-[10px] font-black px-2 py-1 rounded-full border select-none"
+                      className="flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border select-none transition-all active:scale-95 disabled:opacity-80 cursor-pointer"
                       style={{
-                        background: "rgba(139,92,246,0.12)",
-                        borderColor: "rgba(139,92,246,0.32)",
-                        color: "#a78bfa",
+                        background:
+                          friendStatus === "friend"
+                            ? "rgba(16,185,129,0.18)"
+                            : friendStatus === "sent"
+                            ? "rgba(100,116,139,0.2)"
+                            : "rgba(139,92,246,0.18)",
+                        borderColor:
+                          friendStatus === "friend"
+                            ? "rgba(16,185,129,0.4)"
+                            : friendStatus === "sent"
+                            ? "rgba(100,116,139,0.3)"
+                            : "rgba(139,92,246,0.4)",
+                        color:
+                          friendStatus === "friend"
+                            ? "#34d399"
+                            : friendStatus === "sent"
+                            ? "#94a3b8"
+                            : "#c084fc",
                       }}
                     >
-                      <UserPlus size={10} />
+                      {friendStatus === "sending" ? (
+                        <Loader2 size={10} className="animate-spin" />
+                      ) : friendStatus === "sent" ? (
+                        <>
+                          <Check size={10} />
+                          <span>পাঠানো হয়েছে</span>
+                        </>
+                      ) : friendStatus === "friend" ? (
+                        <>
+                          <Check size={10} />
+                          <span>বন্ধু</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus size={10} />
+                          <span>Add Friend</span>
+                        </>
+                      )}
                     </button>
                   )}
                 </div>
+
+                {friendToast && (
+                  <div className="mt-2 text-[10px] font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-3 py-1 rounded-full text-center">
+                    {friendToast}
+                  </div>
+                )}
 
                 {/* Bio */}
                 {student.bio && (
