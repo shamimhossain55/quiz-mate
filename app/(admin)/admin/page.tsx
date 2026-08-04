@@ -143,6 +143,7 @@ export default function AdminPage() {
   const [selectedRole, setSelectedRole] = useState<
     "super_admin" | "admin" | "moderator" | "content_creator" | "user"
   >("user");
+  const [userRoleFilter, setUserRoleFilter] = useState<"all" | "admin" | "user">("all");
 
   // Firestore Data State
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -269,12 +270,13 @@ export default function AdminPage() {
     newRole: "super_admin" | "admin" | "moderator" | "content_creator" | "user"
   ) => {
     try {
-      await updateStudentRole(userId, newRole);
+      const targetUser = users.find((u) => u.id === userId);
+      await updateStudentRole(userId, newRole, targetUser?.email);
       setUsers(users.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
       showToast(`ইউজার রোল পরিবর্তন করা হয়েছে: ${newRole.toUpperCase()} 🛡️`);
       setRoleModalUser(null);
-    } catch (err) {
-      showToast("ত্রুটি: রোল পরিবর্তন করা যায়নি");
+    } catch (err: any) {
+      showToast(`ত্রুটি: ${err.message || "রোল পরিবর্তন করা যায়নি"}`);
     }
   };
 
@@ -1552,37 +1554,100 @@ export default function AdminPage() {
               )}
 
               {/* USERS TABLE WITH RBAC ROLE MANAGEMENT */}
-              {activeNav === "users" && (
-                <div className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80">
-                    <div>
-                      <p className="text-sm font-extrabold text-white">ইউজার ও রোল অ্যাক্সেস ম্যানেজমেন্ট ({users.length})</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">রোল-বেজড অ্যাক্সেস কন্ট্রোল (Super Admin / Admin / Moderator / Editor / User)</p>
+              {activeNav === "users" && (() => {
+                const adminCount = users.filter((u) =>
+                  ["super_admin", "admin", "moderator", "content_creator"].includes((u.role || "").toLowerCase())
+                ).length;
+                const generalUserCount = users.length - adminCount;
+
+                const filteredUsers = users.filter((u) => {
+                  const role = (u.role || "").toLowerCase();
+                  const isAdminRole = ["super_admin", "admin", "moderator", "content_creator"].includes(role);
+                  if (userRoleFilter === "admin") return isAdminRole;
+                  if (userRoleFilter === "user") return !isAdminRole;
+                  return true;
+                });
+
+                return (
+                  <div className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-slate-800/80">
+                      <div>
+                        <p className="text-sm font-extrabold text-white">ইউজার ও রোল অ্যাক্সেস ম্যানেজমেন্ট ({filteredUsers.length} / {users.length})</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">রোল-বেজড ফিল্টার ও অ্যাক্সেস কন্ট্রোল</p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Role Filter Buttons */}
+                        <div className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-xl border border-slate-700/70 text-[10px] font-bold">
+                          <button
+                            onClick={() => setUserRoleFilter("all")}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                              userRoleFilter === "all" ? "bg-teal-500 text-white font-black shadow-xs" : "text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            সবাই ({users.length})
+                          </button>
+                          <button
+                            onClick={() => setUserRoleFilter("admin")}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                              userRoleFilter === "admin" ? "bg-amber-500 text-white font-black shadow-xs" : "text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            <Shield width={10} height={10} /> অ্যাডমিন ({adminCount})
+                          </button>
+                          <button
+                            onClick={() => setUserRoleFilter("user")}
+                            className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                              userRoleFilter === "user" ? "bg-indigo-500 text-white font-black shadow-xs" : "text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            <Users width={10} height={10} /> সাধারণ ইউজার ({generalUserCount})
+                          </button>
+                        </div>
+
+                        {currentUserRole === "super_admin" && (
+                          <button onClick={() => setIsAddUserOpen(true)} className="flex items-center gap-1 text-[10px] font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-lg hover:bg-teal-500/20 transition-all cursor-pointer">
+                            <Plus width={10} height={10} /> ইউজার যোগ করুন
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {currentUserRole === "super_admin" && (
-                      <button onClick={() => setIsAddUserOpen(true)} className="flex items-center gap-1 text-[10px] font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-lg hover:bg-teal-500/20 transition-all cursor-pointer">
-                        <Plus width={10} height={10} /> ইউজার যোগ করুন
-                      </button>
-                    )}
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[640px]">
-                      <thead>
-                        <tr className="border-b border-slate-800/60">
-                          {["ইউজার", "ক্লাস", "XP / স্ট্রিক", "অ্যাডমিন রোল (Role)", "স্ট্যাটাস", "অ্যাকশন"].map((h) => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[9px] font-extrabold text-slate-500 uppercase tracking-widest">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {users.map((u, idx) => {
-                          const userRole = u.role || (u.status === "active" ? "user" : "user");
-                          return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px]">
+                        <thead>
+                          <tr className="border-b border-slate-800/60">
+                            {["ইউজার", "ক্লাস", "XP / স্ট্রিক", "অ্যাডমিন রোল (Role)", "স্ট্যাটাস", "অ্যাকশন"].map((h) => (
+                              <th key={h} className="px-4 py-2.5 text-left text-[9px] font-extrabold text-slate-500 uppercase tracking-widest">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-8 text-center text-xs text-slate-400 font-bold">
+                                এই ফিল্টারে কোনো ইউজার পাওয়া যায়নি।
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredUsers.map((u, idx) => {
+                              const userRole = u.role || "user";
+                              return (
                             <tr key={u.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 transition-colors group">
                               <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-2.5">
-                                  <div className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${["bg-teal-900 text-teal-300","bg-indigo-900 text-indigo-300","bg-rose-900 text-rose-300","bg-amber-900 text-amber-300"][idx % 4]}`}>
-                                    {u.name.slice(0, 1)}
+                                  <div className="h-8 w-8 rounded-full overflow-hidden flex-shrink-0 bg-slate-800 border border-slate-700/80 flex items-center justify-center shadow-xs">
+                                    {u.avatarUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        src={u.avatarUrl}
+                                        alt={u.name}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className={`h-full w-full flex items-center justify-center text-xs font-black ${["bg-teal-900 text-teal-300","bg-indigo-900 text-indigo-300","bg-rose-900 text-rose-300","bg-amber-900 text-amber-300"][idx % 4]}`}>
+                                        {(u.name || "U").slice(0, 1).toUpperCase()}
+                                      </div>
+                                    )}
                                   </div>
                                   <div>
                                     <p className="text-xs font-bold text-white">{u.name}</p>
@@ -1664,12 +1729,14 @@ export default function AdminPage() {
                               </td>
                             </tr>
                           );
-                        })}
-                      </tbody>
+                            })
+                          )}
+                        </tbody>
                     </table>
                   </div>
                 </div>
-              )}
+              );
+            })()}
             </>
           )}
         </main>

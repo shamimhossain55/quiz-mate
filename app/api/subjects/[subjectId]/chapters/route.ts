@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase-admin";
@@ -11,10 +11,10 @@ export type ChapterOption = {
 };
 
 export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ subjectId: string }> }
+  request: NextRequest,
+  context: { params: Promise<any> }
 ) {
-  const { subjectId } = await params;
+  const { subjectId } = await context.params;
 
   const session = await getServerSession(authOptions);
 

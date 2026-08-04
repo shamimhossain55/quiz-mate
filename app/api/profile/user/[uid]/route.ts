@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase-admin";
@@ -9,10 +9,10 @@ import { adminDb } from "@/lib/firebase-admin";
  * Strips sensitive fields before returning.
  */
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ uid: string }> }
+  req: NextRequest,
+  context: { params: Promise<any> }
 ) {
-  const { uid } = await params;
+  const { uid } = await context.params;
   if (!uid) {
     return NextResponse.json({ error: "uid প্রয়োজন" }, { status: 400 });
   }

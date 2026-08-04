@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Flame, GraduationCap, Zap, Trophy, MessageCircle } from "lucide-react";
+import { Flame, GraduationCap, Zap, Trophy, MessageCircle, ShieldCheck } from "lucide-react";
 import { Student } from "@/types/firestore";
 import { useFriendNotif } from "@/context/FriendNotifContext";
 
@@ -25,7 +25,7 @@ const GROUP_NAMES: Record<string, string> = {
 
 interface DashboardHeaderProps {
   student: Student | null;
-  sessionUser: { name?: string | null; email?: string | null; image?: string | null } | null;
+  sessionUser: { name?: string | null; email?: string | null; image?: string | null; role?: string } | null;
   userAvatar: string | null;
   greeting: string;
   greetingEmoji: string;
@@ -42,12 +42,13 @@ export default function DashboardHeader({
   const { unreadMsgCount } = useFriendNotif();
   const currentPoints = student?.point || 0;
   const currentLevel = student?.level || 1;
-  const xpForNextLevel = currentLevel * 250;
   const currentLevelXP = currentPoints % 250;
   const xpPercentage = Math.min(100, Math.round((currentLevelXP / 250) * 100));
 
   const classNameText = CLASS_NAMES[student?.classId || "class6"] || student?.classId || "ষষ্ঠ শ্রেণী";
   const groupText = student?.group && student.group !== "all" ? ` (${GROUP_NAMES[student.group] || student.group})` : "";
+
+  const isAdmin = sessionUser?.role === "admin";
 
   return (
     <div className="flex-shrink-0 px-4 pt-3.5 pb-3 bg-white/80 backdrop-blur-xl border-b border-slate-200/70 shadow-xs z-30 sticky top-0">
@@ -97,6 +98,19 @@ export default function DashboardHeader({
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Conditional Admin Panel Button */}
+          {isAdmin && (
+            <button
+              onClick={() => router.push("/admin")}
+              aria-label="Admin Panel"
+              title="অ্যাডমিন প্যানেলে যান"
+              className="h-10 px-3 flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-amber-500 to-rose-600 text-white font-extrabold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer border border-amber-300/40"
+            >
+              <ShieldCheck width={18} height={18} className="text-white flex-shrink-0" />
+              <span className="text-xs tracking-tight">Admin</span>
+            </button>
+          )}
+
           {/* Message Icon Button with Notification Badge */}
           <button
             onClick={() => router.push("/community")}

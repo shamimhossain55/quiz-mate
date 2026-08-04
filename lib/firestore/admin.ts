@@ -25,7 +25,9 @@ export type AdminUser = {
   status: "active" | "inactive" | "banned";
   role?: "super_admin" | "admin" | "moderator" | "content_creator" | "user";
   createdAt?: any;
+  avatarUrl?: string | null;
 };
+
 
 export type AdminClass = {
   id: string;
@@ -202,6 +204,7 @@ export async function getAllStudents(): Promise<AdminUser[]> {
         streak: data.streak || 0,
         status: data.status || "active",
         role: data.role || (data.isAdmin ? "admin" : "user"),
+        avatarUrl: data.avatarUrl || null,
       };
     });
   } catch (err) {
@@ -226,18 +229,19 @@ export async function updateStudentStatus(id: string, status: "active" | "inacti
 
 export async function updateStudentRole(
   id: string,
-  role: "super_admin" | "admin" | "moderator" | "content_creator" | "user"
+  role: "super_admin" | "admin" | "moderator" | "content_creator" | "user",
+  email?: string
 ) {
-  const userRef = doc(db, "students", id);
-  const isAdminRole =
-    role === "super_admin" ||
-    role === "admin" ||
-    role === "moderator" ||
-    role === "content_creator";
-  await updateDoc(userRef, {
-    role,
-    isAdmin: isAdminRole,
+  const res = await fetch("/api/admin/users/role", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: id, email: email || id, role }),
   });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || " Failed to update user role");
+  }
 }
 
 export async function deleteStudent(id: string) {
