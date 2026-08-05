@@ -23,9 +23,16 @@ export default function ChapterCard({ chapter }: ChapterCardProps) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-extrabold text-teal-600 uppercase tracking-wide">
-            অধ্যায় {chapter.order || 1}
-          </p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[9px] font-extrabold text-teal-600 uppercase tracking-wide">
+              অধ্যায় {chapter.order || 1}
+            </span>
+            {chapter.sectionName && (
+              <span className="text-[9px] font-extrabold bg-teal-50 text-teal-700 border border-teal-200/80 px-1.5 py-0.5 rounded-md">
+                {chapter.sectionName}
+              </span>
+            )}
+          </div>
           <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug truncate group-hover:text-teal-700 transition-colors">
             {chapter.name}
           </h3>

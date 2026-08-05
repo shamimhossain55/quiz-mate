@@ -46,6 +46,7 @@ export type AdminSubject = {
   color?: string;
   order?: number;
   imageUrl?: string;
+  sections?: string[];
 };
 
 export type AdminChapter = {
@@ -54,6 +55,7 @@ export type AdminChapter = {
   subjectId: string;
   chapterNo: number;
   order: number;
+  sectionName?: string;
 };
 
 export type AdminQuiz = {
@@ -129,6 +131,7 @@ export async function getChaptersBySubject(subjectId: string): Promise<AdminChap
       subjectId: docSnap.data().subjectId || subjectId,
       chapterNo: docSnap.data().chapterNo || 1,
       order: docSnap.data().order || 1,
+      sectionName: docSnap.data().sectionName || undefined,
     }));
   } catch (err) {
     console.error("Error fetching chapters:", err);
@@ -149,6 +152,7 @@ export async function getAllChapters(): Promise<AdminChapter[]> {
       subjectId: docSnap.data().subjectId || "",
       chapterNo: docSnap.data().chapterNo || 1,
       order: docSnap.data().order || 1,
+      sectionName: docSnap.data().sectionName || undefined,
     }));
   } catch (err) {
     console.error("Error fetching all chapters:", err);
@@ -263,6 +267,7 @@ export async function getAllSubjects(): Promise<AdminSubject[]> {
       totalStudents: docSnap.data().totalStudents || 350,
       color: docSnap.data().color || "#0D9488",
       imageUrl: docSnap.data().imageUrl || undefined,
+      sections: docSnap.data().sections || undefined,
     }));
   } catch (err) {
     console.error("Error fetching subjects:", err);
@@ -290,6 +295,7 @@ export async function addSubject(subject: AdminSubject): Promise<void> {
     color: subject.color || "#0D9488",
     order: subject.order || 1,
     imageUrl: subject.imageUrl || "",
+    sections: subject.sections || [],
   });
   notifySubjectsUpdated();
 }
@@ -303,6 +309,7 @@ export async function updateSubject(id: string, subject: Partial<AdminSubject>):
   if (subject.group !== undefined) cleanData.group = subject.group;
   if (subject.color !== undefined) cleanData.color = subject.color;
   if (subject.imageUrl !== undefined) cleanData.imageUrl = subject.imageUrl;
+  if (subject.sections !== undefined) cleanData.sections = subject.sections;
   await updateDoc(subRef, cleanData);
   notifySubjectsUpdated();
 }

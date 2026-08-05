@@ -128,6 +128,21 @@ const PRESET_BADGE_TAGS = [
   "UPDATE 📢",
 ];
 
+const PRESET_SECTION_TAGS = [
+  "গদ্য",
+  "কবিতা",
+  "উপন্যাস",
+  "নাটক",
+  "১ম পত্র",
+  "২য় পত্র",
+  "Grammar",
+  "First Paper",
+  "Second Paper",
+  "Vocabulary",
+  "সৃজনশীল (CQ)",
+  "এমসিকিউ (MCQ)",
+];
+
 export default function AdminPage() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -173,7 +188,7 @@ export default function AdminPage() {
   const [isAddChapterOpen, setIsAddChapterOpen] = useState(false);
   const [editingChapter, setEditingChapter] = useState<AdminChapter | null>(null);
   const [chapterSubjectFilter, setChapterSubjectFilter] = useState<string>("all");
-  const [newChapter, setNewChapter] = useState({ name: "", subjectId: "", chapterNo: 1 });
+  const [newChapter, setNewChapter] = useState({ name: "", subjectId: "", chapterNo: 1, sectionName: "" });
 
   // Form Cascading Select States for Quiz Creation
   const [selectedClassId, setSelectedClassId] = useState("class6");
@@ -181,7 +196,7 @@ export default function AdminPage() {
   const [selectedChapterId, setSelectedChapterId] = useState("");
 
   const [newQuiz, setNewQuiz] = useState({ name: "", questionsCount: 10, status: "published" as const });
-  const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "" });
+  const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "", sectionsText: "" });
   const [newUser, setNewUser] = useState({ name: "", email: "", class: "ক্লাস ৯" });
   const [newBanner, setNewBanner] = useState({
     title: "",
@@ -480,6 +495,9 @@ export default function AdminPage() {
     if (!newSubject.name) return;
     try {
       const slugVal = newSubject.slug || newSubject.name.toLowerCase().replace(/\s+/g, "-");
+      const parsedSections = newSubject.sectionsText
+        ? newSubject.sectionsText.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
       const item: AdminSubject = {
         id: `${newSubject.classId}_${slugVal}`,
         name: newSubject.name,
@@ -488,6 +506,7 @@ export default function AdminPage() {
         group: newSubject.group || "all",
         color: newSubject.color,
         imageUrl: newSubject.imageUrl || undefined,
+        sections: parsedSections,
         totalQuizzes: 0,
         totalStudents: 0,
         order: subjects.length + 1,
@@ -499,7 +518,7 @@ export default function AdminPage() {
       }
       setSubjects([...subjects, item]);
       setIsAddSubjectOpen(false);
-      setNewSubject({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "" });
+      setNewSubject({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "", sectionsText: "" });
       showToast("Firebase-এ নতুন বিষয় যুক্ত হয়েছে! 📚");
     } catch (err) {
       showToast("ত্রুটি: বিষয় যুক্ত করা যায়নি");
@@ -510,6 +529,11 @@ export default function AdminPage() {
     e.preventDefault();
     if (!editingSubject || !editingSubject.name) return;
     try {
+      const parsedSections = (editingSubject as any).sectionsText !== undefined
+        ? (editingSubject as any).sectionsText.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : editingSubject.sections;
+      const updatedSubjectObj = { ...editingSubject, sections: parsedSections };
+
       await updateSubject(editingSubject.id, {
         name: editingSubject.name,
         classId: editingSubject.classId,
@@ -517,12 +541,13 @@ export default function AdminPage() {
         group: editingSubject.group || "all",
         color: editingSubject.color,
         imageUrl: editingSubject.imageUrl || undefined,
+        sections: parsedSections,
       });
       if (editingSubject.imageUrl) {
         saveLocalSubjectImage(editingSubject.id, editingSubject.imageUrl);
         saveLocalSubjectImage(editingSubject.slug, editingSubject.imageUrl);
       }
-      setSubjects(subjects.map((s) => (s.id === editingSubject.id ? editingSubject : s)));
+      setSubjects(subjects.map((s) => (s.id === editingSubject.id ? updatedSubjectObj : s)));
       setEditingSubject(null);
       showToast("বিষয় সফলভাবে আপডেট ও নতুন ক্লাসে সেট হয়েছে! ✏️");
     } catch (err) {
@@ -685,13 +710,13 @@ export default function AdminPage() {
   // ===== CHAPTER HANDLERS =====
   const handleOpenAddChapter = (preSelectedSubjectId?: string) => {
     setEditingChapter(null);
-    setNewChapter({ name: "", subjectId: preSelectedSubjectId || (subjects[0]?.id || ""), chapterNo: 1 });
+    setNewChapter({ name: "", subjectId: preSelectedSubjectId || (subjects[0]?.id || ""), chapterNo: 1, sectionName: "" });
     setIsAddChapterOpen(true);
   };
 
   const handleOpenEditChapter = (ch: AdminChapter) => {
     setEditingChapter(ch);
-    setNewChapter({ name: ch.name, subjectId: ch.subjectId, chapterNo: ch.chapterNo });
+    setNewChapter({ name: ch.name, subjectId: ch.subjectId, chapterNo: ch.chapterNo, sectionName: ch.sectionName || "" });
     setIsAddChapterOpen(true);
   };
 
@@ -704,6 +729,7 @@ export default function AdminPage() {
         subjectId: newChapter.subjectId,
         chapterNo: newChapter.chapterNo,
         order: newChapter.chapterNo,
+        sectionName: newChapter.sectionName || undefined,
       };
       if (editingChapter) {
         await updateChapter(editingChapter.id, payload);
@@ -1431,6 +1457,16 @@ export default function AdminPage() {
                           <div className="relative z-10 pt-1">
                             <h3 className="text-lg font-black text-white drop-shadow-sm">{sub.name}</h3>
                             <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {sub.id} · Slug: /{sub.slug}</p>
+                            {sub.sections && sub.sections.length > 0 && (
+                              <div className="flex items-center gap-1 flex-wrap mt-2">
+                                <span className="text-[9px] font-bold text-slate-500">সেকশন:</span>
+                                {sub.sections.map((sec) => (
+                                  <span key={sec} className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                                    {sec}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -2313,6 +2349,18 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৪. সেকশনসমূহ (Sections) — অপশনাল</label>
+                <input
+                  type="text"
+                  placeholder="যেমন: গদ্য, কবিতা, উপন্যাস, নাটক (কমা দিয়ে আলাদা করুন)"
+                  value={newSubject.sectionsText}
+                  onChange={(e) => setNewSubject({ ...newSubject, sectionsText: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-indigo-500"
+                />
+                <p className="text-[10px] text-teal-400 mt-1">💡 সেকশন দিলে অধ্যায়গুলো গ্রুপে ভাগ হবে (যেমন: বাংলা ১ম পত্রের গদ্য / কবিতা)।</p>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setIsAddSubjectOpen(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
                 <button type="submit" className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold shadow-lg">Firebase-এ সেভ করুন</button>
@@ -2448,6 +2496,87 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-slate-400 font-bold mb-1 flex items-center justify-between">
+                  <span>৪. সেকশনসমূহ (Sections) — অপショナル</span>
+                  <span className="text-[10px] text-amber-400 font-medium">
+                    ({((editingSubject as any).sectionsText ?? (editingSubject.sections || []).join(", "))
+                      .split(",")
+                      .map((s: string) => s.trim())
+                      .filter(Boolean).length}টি সেকশন)
+                  </span>
+                </label>
+
+                {/* Active Section Chips */}
+                {(() => {
+                  const rawVal = (editingSubject as any).sectionsText ?? (editingSubject.sections || []).join(", ");
+                  const secs = rawVal.split(",").map((s: string) => s.trim()).filter(Boolean);
+                  if (secs.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-slate-950/60 rounded-xl border border-slate-800">
+                      {secs.map((sec: string) => (
+                        <span key={sec} className="text-[10px] font-extrabold px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5">
+                          {sec}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = secs.filter((s: string) => s !== sec);
+                              setEditingSubject({ ...editingSubject, sectionsText: updated.join(", ") } as any);
+                            }}
+                            className="hover:text-rose-400 text-amber-300 font-bold text-xs"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Quick Add Presets */}
+                <div className="mb-2">
+                  <span className="text-[10px] text-slate-500 font-bold block mb-1">দ্রুত সেকশন ট্যাগ সিলেক্ট করুন:</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {PRESET_SECTION_TAGS.map((tag) => {
+                      const rawVal = (editingSubject as any).sectionsText ?? (editingSubject.sections || []).join(", ");
+                      const currentSecs = rawVal.split(",").map((s: string) => s.trim()).filter(Boolean);
+                      const isAdded = currentSecs.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            if (isAdded) {
+                              const updated = currentSecs.filter((s: string) => s !== tag);
+                              setEditingSubject({ ...editingSubject, sectionsText: updated.join(", ") } as any);
+                            } else {
+                              const updated = [...currentSecs, tag];
+                              setEditingSubject({ ...editingSubject, sectionsText: updated.join(", ") } as any);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                            isAdded
+                              ? "bg-amber-500/25 text-amber-300 border-amber-500/60 ring-1 ring-amber-500/30 shadow-xs"
+                              : "bg-slate-800/80 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-white"
+                          }`}
+                        >
+                          {isAdded ? `✓ ${tag}` : `+ ${tag}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <input
+                  type="text"
+                  placeholder="যেমন: গদ্য, কবিতা, উপন্যাস, নাটক (কমা দিয়ে টাইপ করতে পারেন)"
+                  value={(editingSubject as any).sectionsText ?? (editingSubject.sections || []).join(", ")}
+                  onChange={(e) => setEditingSubject({ ...editingSubject, sectionsText: e.target.value } as any)}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-teal-400 mt-1">💡 সেকশন দিলে অধ্যায়গুলো ওই গ্রুপে ভাগ হয়ে দেখাবে (যেমন: বাংলা ১ম পত্রের গদ্য / কবিতা)।</p>
+              </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setEditingSubject(null)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
                 <button type="submit" className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold shadow-lg">পরিবর্তন সেভ করুন</button>
@@ -2551,41 +2680,37 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Title Input */}
+              {/* Title & Subtitle Inputs */}
               <div>
-                <label className="block text-slate-400 font-bold mb-1">১. শিরোনাম (Title) <span className="text-rose-400">*</span></label>
+                <label className="block text-slate-400 font-bold mb-1">১. ব্যানার শিরোনাম (Title) <span className="text-rose-400">*</span></label>
                 <input
                   type="text"
                   required
-                  placeholder="যেমন: ১v১ লাইভ ফ্রেন্ড ব্যাটেল"
+                  placeholder="যেমন: এইচএসসি ২৫ রিভিশন ব্যাচ"
                   value={newBanner.title}
                   onChange={(e) => setNewBanner({ ...newBanner, title: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500 font-bold"
                 />
               </div>
 
-              {/* Subtitle Input */}
               <div>
-                <label className="block text-slate-400 font-bold mb-1">২. সংক্ষিপ্ত বিবরণ (Subtitle) <span className="text-rose-400">*</span></label>
-                <input
-                  type="text"
-                  required
-                  placeholder="যেমন: বন্ধুদের সাথে সরাসরি রিয়েল-টাইম কুইজ যুদ্ধ করো!"
+                <label className="block text-slate-400 font-bold mb-1">২. ব্যানার সাবটাইটেল / বিবরণ (Subtitle)</label>
+                <textarea
+                  rows={2}
+                  placeholder="যেমন: সকল বিষয় এক জায়গায় সমাধান করো..."
                   value={newBanner.subtitle}
                   onChange={(e) => setNewBanner({ ...newBanner, subtitle: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500"
                 />
               </div>
 
-              {/* Redirect Page Dropdown (Requested Feature) */}
-              <div className="p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl space-y-2">
-                <label className="block text-teal-300 font-extrabold mb-1">
-                  ৩. নেভিগেশন / রিডাইরেক্ট পেজ সিলেক্ট করুন (Destination Page)
-                </label>
+              {/* Route Presets */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৩. রাউট নির্দেশক (Target Route Link)</label>
                 <select
                   value={selectedBannerRoutePreset}
                   onChange={(e) => setSelectedBannerRoutePreset(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-teal-500/50 rounded-xl text-white font-bold focus:outline-none focus:border-teal-400"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-teal-500 mb-2"
                 >
                   {PRESET_BANNER_ROUTES.map((route) => (
                     <option key={route.value} value={route.value}>
@@ -2593,16 +2718,14 @@ export default function AdminPage() {
                     </option>
                   ))}
                 </select>
-
                 {selectedBannerRoutePreset === "custom" && (
-                  <div className="pt-1">
-                    <label className="block text-slate-400 text-[10px] font-bold mb-1">কাস্টম URL লিখুন (e.g. /subject/maths বা https://...)</label>
+                  <div>
                     <input
                       type="text"
-                      placeholder="/subject/physics"
+                      placeholder="যেমন: /quiz/setup"
                       value={customBannerRouteUrl}
                       onChange={(e) => setCustomBannerRouteUrl(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none font-mono text-[11px]"
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none font-mono text-[11px]"
                     />
                   </div>
                 )}
@@ -2718,7 +2841,7 @@ export default function AdminPage() {
                 <select
                   required
                   value={newChapter.subjectId}
-                  onChange={(e) => setNewChapter({ ...newChapter, subjectId: e.target.value })}
+                  onChange={(e) => setNewChapter({ ...newChapter, subjectId: e.target.value, sectionName: "" })}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-amber-500"
                 >
                   <option value="">বিষয় সিলেক্ট করুন</option>
@@ -2733,8 +2856,85 @@ export default function AdminPage() {
                 </select>
               </div>
 
+              {/* Section dropdown — shown dynamically based on selected subject */}
+              {(() => {
+                const selectedSubObj = subjects.find((s) => s.id === newChapter.subjectId);
+                const availSections = selectedSubObj?.sections || [];
+
+                return (
+                  <div className="p-3 rounded-xl bg-slate-800/60 border border-teal-500/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-teal-300 font-extrabold text-xs flex items-center gap-1.5">
+                        <Layers width={14} height={14} className="text-teal-400" />
+                        ২. অধ্যায়ের সেকশন (Section Select)
+                      </label>
+                      {availSections.length > 0 && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                          {availSections.length}টি সেকশন পাওয়া গেছে
+                        </span>
+                      )}
+                    </div>
+
+                    {availSections.length > 0 ? (
+                      <div>
+                        <select
+                          value={newChapter.sectionName || ""}
+                          onChange={(e) => setNewChapter({ ...newChapter, sectionName: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-900 border border-teal-500/60 rounded-xl text-white font-black focus:outline-none focus:ring-2 focus:ring-teal-500/40 cursor-pointer text-xs"
+                        >
+                          <option value="">— সাধারণ অধ্যায় (কোনো সেকশন নেই) —</option>
+                          {availSections.map((sec) => (
+                            <option key={sec} value={sec}>
+                              📂 {sec}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[10px] text-teal-400/90 mt-1 font-medium">
+                          💡 এই বিষয়টিতে সেট করা সেকশনসমূহ থেকে অধ্যায়ের ড্রপডাউন গ্রুপ বেছে নিন।
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-amber-300 font-bold">
+                          💡 {selectedSubObj ? `"${selectedSubObj.name}"` : "এই"} বিষয়ে এখনো কোনো সেকশন সেট করা নেই।
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="নতুন সেকশন নাম (যেমন: ১ম পত্র / গদ্য)"
+                            value={newChapter.sectionName || ""}
+                            onChange={(e) => setNewChapter({ ...newChapter, sectionName: e.target.value })}
+                            className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none font-bold text-xs"
+                          />
+                          {newChapter.sectionName && selectedSubObj && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const newSecName = newChapter.sectionName.trim();
+                                if (!newSecName || !selectedSubObj) return;
+                                const updatedSecs = [...(selectedSubObj.sections || []), newSecName];
+                                try {
+                                  await updateSubject(selectedSubObj.id, { sections: updatedSecs });
+                                  setSubjects(subjects.map((s) => (s.id === selectedSubObj.id ? { ...s, sections: updatedSecs } : s)));
+                                  showToast(`বিষয়ে নতুন সেকশন "${newSecName}" যোগ হয়েছে! 📚`);
+                                } catch (e) {
+                                  showToast("সেকশন যোগ করা যায়নি");
+                                }
+                              }}
+                              className="px-2.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[10px] font-black transition-all shadow shrink-0"
+                            >
+                              + বিষয়ে সেভ করুন
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div>
-                <label className="block text-slate-400 font-bold mb-1">২. অধ্যায়ের নাম (Chapter Name) <span className="text-rose-400">*</span></label>
+                <label className="block text-slate-400 font-bold mb-1">৩. অধ্যায়ের নাম (Chapter Name) <span className="text-rose-400">*</span></label>
                 <input
                   type="text"
                   required
@@ -2746,7 +2946,7 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-slate-400 font-bold mb-1">৩. অধ্যায় নম্বর (Chapter No.)</label>
+                <label className="block text-slate-400 font-bold mb-1">৪. অধ্যায় নম্বর (Chapter No.)</label>
                 <input
                   type="number"
                   min={1}

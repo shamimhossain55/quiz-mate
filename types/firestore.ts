@@ -15,6 +15,7 @@ export interface FirestoreSubject {
   group?: SubjectGroup;
   order: number;
   imageUrl?: string;
+  sections?: string[];
 }
 
 export interface Chapter {
@@ -23,6 +24,7 @@ export interface Chapter {
   name: string;
   author?: string;
   order: number;
+  sectionName?: string;
 }
 
 export interface Quiz {
