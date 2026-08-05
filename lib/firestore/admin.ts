@@ -258,6 +258,7 @@ export async function getAllSubjects(): Promise<AdminSubject[]> {
       name: docSnap.data().name || docSnap.id,
       slug: docSnap.data().slug || docSnap.id,
       classId: docSnap.data().classId || "class6",
+      group: docSnap.data().group || "all",
       totalQuizzes: docSnap.data().totalQuizzes || 10,
       totalStudents: docSnap.data().totalStudents || 350,
       color: docSnap.data().color || "#0D9488",
@@ -269,16 +270,28 @@ export async function getAllSubjects(): Promise<AdminSubject[]> {
   }
 }
 
+import { clearSubjectCache } from "@/lib/firestore/subjects";
+
+function notifySubjectsUpdated() {
+  clearSubjectCache();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("qm_subjects_updated"));
+    localStorage.removeItem("qm_cached_dashboard_subjects");
+  }
+}
+
 export async function addSubject(subject: AdminSubject): Promise<void> {
   const subjectId = subject.id || `${subject.classId}_${subject.slug}`;
   await setDoc(doc(db, "subjects", subjectId), {
     name: subject.name,
     slug: subject.slug,
     classId: subject.classId,
+    group: subject.group || "all",
     color: subject.color || "#0D9488",
     order: subject.order || 1,
     imageUrl: subject.imageUrl || "",
   });
+  notifySubjectsUpdated();
 }
 
 export async function updateSubject(id: string, subject: Partial<AdminSubject>): Promise<void> {
@@ -287,13 +300,16 @@ export async function updateSubject(id: string, subject: Partial<AdminSubject>):
   if (subject.name !== undefined) cleanData.name = subject.name;
   if (subject.slug !== undefined) cleanData.slug = subject.slug;
   if (subject.classId !== undefined) cleanData.classId = subject.classId;
+  if (subject.group !== undefined) cleanData.group = subject.group;
   if (subject.color !== undefined) cleanData.color = subject.color;
   if (subject.imageUrl !== undefined) cleanData.imageUrl = subject.imageUrl;
   await updateDoc(subRef, cleanData);
+  notifySubjectsUpdated();
 }
 
 export async function deleteSubject(id: string): Promise<void> {
   await deleteDoc(doc(db, "subjects", id));
+  notifySubjectsUpdated();
 }
 
 

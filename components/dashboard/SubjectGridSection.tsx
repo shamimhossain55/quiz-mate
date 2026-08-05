@@ -22,9 +22,10 @@ export type SubjectItem = {
 
 interface SubjectGridSectionProps {
   subjectsList: SubjectItem[];
+  isLoading?: boolean;
 }
 
-export default function SubjectGridSection({ subjectsList = [] }: SubjectGridSectionProps) {
+export default function SubjectGridSection({ subjectsList = [], isLoading = false }: SubjectGridSectionProps) {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<"all" | "in_progress" | "completed">("all");
 
@@ -68,7 +69,25 @@ export default function SubjectGridSection({ subjectsList = [] }: SubjectGridSec
       </div>
 
       {/* Grid List */}
-      {filteredSubjects.length === 0 ? (
+      {isLoading && subjectsList.length === 0 ? (
+        <div className="grid grid-cols-3 gap-2.5">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-2xl p-2 flex flex-col justify-between aspect-[3/4] min-h-[145px] bg-slate-200/60 animate-pulse border border-slate-200"
+            >
+              <div className="flex justify-end">
+                <div className="h-3 w-8 bg-slate-300/70 rounded-full" />
+              </div>
+              <div className="mt-auto space-y-1.5">
+                <div className="h-2 w-10 bg-slate-300/70 rounded" />
+                <div className="h-3 w-16 bg-slate-300/90 rounded" />
+                <div className="h-2 w-full bg-slate-300/50 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredSubjects.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-6 rounded-3xl bg-white border border-slate-200/80 text-center shadow-2xs space-y-2">
           <div className="h-10 w-10 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600">
             <BookOpen width={20} height={20} />

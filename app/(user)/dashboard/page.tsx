@@ -28,7 +28,19 @@ const defaultPalette = [
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const [subjectsList, setSubjectsList] = useState<SubjectItem[]>([]);
+  const [subjectsList, setSubjectsList] = useState<SubjectItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("qm_cached_dashboard_subjects");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [isSubjectsLoading, setIsSubjectsLoading] = useState<boolean>(() => subjectsList.length === 0);
   const [student, setStudent] = useState<Student | null>(null);
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [bannerList, setBannerList] = useState<BannerSlide[]>([]);
@@ -55,7 +67,12 @@ export default function DashboardPage() {
       }
     };
 
+    const handleSubjectsUpdate = () => {
+      loadData();
+    };
+
     window.addEventListener("qm_avatar_updated", handleAvatarUpdate);
+    window.addEventListener("qm_subjects_updated", handleSubjectsUpdate);
     window.addEventListener("storage", handleAvatarUpdate);
 
     const hour = new Date().getHours();
@@ -163,15 +180,26 @@ export default function DashboardPage() {
             };
           });
           setSubjectsList(mapped);
+          try {
+            localStorage.setItem("qm_cached_dashboard_subjects", JSON.stringify(mapped));
+          } catch (e) {}
         } else {
           setSubjectsList([]);
+          try {
+            localStorage.removeItem("qm_cached_dashboard_subjects");
+          } catch (e) {}
         }
-      } catch (err) { console.error("Error loading dashboard data:", err); }
+      } catch (err) {
+        console.error("Error loading dashboard data:", err);
+      } finally {
+        setIsSubjectsLoading(false);
+      }
     }
     loadData();
 
     return () => {
       window.removeEventListener("qm_avatar_updated", handleAvatarUpdate);
+      window.removeEventListener("qm_subjects_updated", handleSubjectsUpdate);
       window.removeEventListener("storage", handleAvatarUpdate);
     };
   }, [session]);
@@ -209,7 +237,7 @@ export default function DashboardPage() {
           <ContinueLearningSection subjectsList={subjectsList} />
 
           {/* 4. CURRICULUM HUB (ALL SUBJECTS GRID) */}
-          <SubjectGridSection subjectsList={subjectsList} />
+          <SubjectGridSection subjectsList={subjectsList} isLoading={isSubjectsLoading} />
 
           {/* 5. GAMIFIED DAILY MISSIONS & REWARDS */}
           <DailyMissionsCard

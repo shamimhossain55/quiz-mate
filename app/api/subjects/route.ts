@@ -4,11 +4,31 @@ import { authOptions } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase-admin";
 
 export type SubjectOption = {
-  id: string; // subjectDocId, যেমন "subject_1"
+  id: string;
   name: string;
+  slug?: string;
   group: "all" | "science" | "commerce" | "arts";
   order: number;
+  color?: string;
+  imageUrl?: string;
 };
+
+function isClassMatching(subjectClassId?: string, studentClassId?: string): boolean {
+  if (!studentClassId || !subjectClassId) return true;
+  if (subjectClassId === studentClassId) return true;
+
+  const sscClasses = ["class9", "class10", "class9_10"];
+  if (sscClasses.includes(subjectClassId) && sscClasses.includes(studentClassId)) {
+    return true;
+  }
+
+  const hscClasses = ["class11", "class12", "class11_12"];
+  if (hscClasses.includes(subjectClassId) && hscClasses.includes(studentClassId)) {
+    return true;
+  }
+
+  return false;
+}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -20,9 +40,7 @@ export async function GET() {
   const email = session.user.email;
   const docId = email.toLowerCase();
 
-  // ⚠️ স্টুডেন্টের নিজের classId/group session/query থেকে না নিয়ে,
-  //    সরাসরি তার Firestore ডকুমেন্ট থেকে নেওয়া হচ্ছে (নিরাপদ, এবং onboarding
-  //    করার পরের সঠিক ডেটা নিশ্চিত করার জন্য)
+  // স্টুডেন্টের Firestore ডকুমেন্ট থেকে classId/group নেওয়া হচ্ছে (নিরাপদ)
   const studentSnap = await adminDb.collection("students").doc(docId).get();
   const studentData = studentSnap.data();
 
@@ -36,27 +54,39 @@ export async function GET() {
   const classId: string = studentData.classId;
   const studentGroup: string | null = studentData.group ?? null;
 
-  const snap = await adminDb
-    .collection("classes")
-    .doc(classId)
-    .collection("subjects")
-    .get();
+  // root "subjects" collection থেকে সমস্ত বিষয় নেওয়া হচ্ছে
+  const snap = await adminDb.collection("subjects").get();
 
-  const subjects: SubjectOption[] = snap.docs
-    .map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        name: data.name ?? doc.id,
-        group: (data.group ?? "all") as SubjectOption["group"],
-        order: typeof data.order === "number" ? data.order : 999,
-      };
-    })
-    // যেই subject "all" এর জন্য (কম্পালসরি), অথবা স্টুডেন্টের নিজের গ্রুপের সাথে মেলে —
-    // শুধু সেগুলোই রাখা হচ্ছে (hasGroups=false ক্লাসে সব subject "all" গ্রুপের হবে)
-    .filter((s) => s.group === "all" || s.group === studentGroup);
+  let docsData = snap.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: data.name ?? doc.id,
+      slug: data.slug ?? doc.id,
+      classId: data.classId ?? "class6",
+      group: (data.group ?? "all") as SubjectOption["group"],
+      order: typeof data.order === "number" ? data.order : 999,
+      color: data.color ?? "#0D9488",
+      imageUrl: data.imageUrl ?? "",
+    };
+  });
+
+  // 1. Filter by classId (স্মার্ট ম্যাচিং সহ)
+  const filteredByClass = docsData.filter((s) => isClassMatching(s.classId, classId));
+  if (filteredByClass.length > 0) {
+    docsData = filteredByClass;
+  }
+
+  // 2. Group filter logic
+  const subjects: SubjectOption[] = docsData.filter((s) => {
+    const subjectGroup = (s.group || "all").toLowerCase();
+    if (subjectGroup === "all") return true;
+    if (!studentGroup || studentGroup.toLowerCase() === "all") return false;
+    return subjectGroup === studentGroup.toLowerCase();
+  });
 
   subjects.sort((a, b) => a.order - b.order);
 
   return NextResponse.json({ subjects });
 }
+

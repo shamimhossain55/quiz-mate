@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import SubjectCard from "./SubjectCard";
 
-import { getSubjects } from "@/lib/firestore/subjects";
 import { iconMap } from "@/lib/icon-map";
 
 import { FirestoreSubject } from "@/types/firestore";
@@ -21,14 +20,17 @@ export default function SubjectGrid() {
 
   useEffect(() => {
     async function load() {
-      const firestoreSubjects = await getSubjects("class6");
+      // ✅ /api/subjects — server-side student-এর নিজের classId দিয়ে filter করে
+      const res = await fetch("/api/subjects");
+      if (!res.ok) return;
+      const data = await res.json();
 
-      const mappedSubjects: SubjectCardData[] =
-        firestoreSubjects.map((subject) => ({
+      const mappedSubjects: SubjectCardData[] = (data.subjects ?? []).map(
+        (subject: any) => ({
           ...subject,
-          iconComponent:
-            iconMap[subject.icon] ?? iconMap.default,
-        }));
+          iconComponent: iconMap[subject.icon] ?? iconMap.default,
+        })
+      );
 
       setSubjects(mappedSubjects);
     }

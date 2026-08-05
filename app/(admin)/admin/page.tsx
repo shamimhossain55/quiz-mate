@@ -514,6 +514,7 @@ export default function AdminPage() {
         name: editingSubject.name,
         classId: editingSubject.classId,
         slug: editingSubject.slug,
+        group: editingSubject.group || "all",
         color: editingSubject.color,
         imageUrl: editingSubject.imageUrl || undefined,
       });
@@ -1393,9 +1394,22 @@ export default function AdminPage() {
                           )}
 
                           <div className="flex items-center justify-between relative z-10">
-                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800/90 text-teal-300 border border-teal-500/20 shadow-xs">
-                              {classNameStr}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-800/90 text-teal-300 border border-teal-500/20 shadow-xs">
+                                {classNameStr}
+                              </span>
+                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border shadow-xs ${
+                                sub.group === "science"
+                                  ? "bg-purple-950/80 text-purple-300 border-purple-500/30"
+                                  : sub.group === "commerce"
+                                  ? "bg-amber-950/80 text-amber-300 border-amber-500/30"
+                                  : sub.group === "arts"
+                                  ? "bg-rose-950/80 text-rose-300 border-rose-500/30"
+                                  : "bg-slate-800/90 text-slate-400 border-slate-700"
+                              }`}>
+                                {sub.group === "science" ? "🧪 বিজ্ঞান" : sub.group === "commerce" ? "📊 ব্যবসায়" : sub.group === "arts" ? "🎨 মানবিক" : "🌐 সকল"}
+                              </span>
+                            </div>
                             <div className="flex items-center gap-1.5">
                               <div className="h-3 w-3 rounded-full shadow" style={{ background: sub.color || "#0D9488" }} />
                               <button
@@ -2322,19 +2336,34 @@ export default function AdminPage() {
               </button>
             </div>
             <form onSubmit={handleUpdateSubject} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class) পরিবর্তন করুন</label>
-                <select
-                  value={editingSubject.classId}
-                  onChange={(e) => setEditingSubject({ ...editingSubject, classId: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-bold"
-                >
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class)</label>
+                  <select
+                    value={editingSubject.classId}
+                    onChange={(e) => setEditingSubject({ ...editingSubject, classId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-bold"
+                  >
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">বিভাগ/গ্রুপ (Group)</label>
+                  <select
+                    value={editingSubject.group || "all"}
+                    onChange={(e) => setEditingSubject({ ...editingSubject, group: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500 font-bold"
+                  >
+                    <option value="all">সকল বিভাগ (All)</option>
+                    <option value="science">বিজ্ঞান (Science)</option>
+                    <option value="commerce">ব্যবসায় শিক্ষা (Commerce)</option>
+                    <option value="arts">মানবিক (Arts)</option>
+                  </select>
+                </div>
               </div>
 
               <div>

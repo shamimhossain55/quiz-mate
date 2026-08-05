@@ -11,6 +11,31 @@ import {
 import { db } from "@/lib/firebase-client";
 import { FirestoreSubject } from "@/types/firestore";
 
+function isClassMatching(subjectClassId?: string, studentClassId?: string): boolean {
+  if (!studentClassId || !subjectClassId) return true;
+  if (subjectClassId === studentClassId) return true;
+
+  // SSC group (Class 9, Class 10, SSC)
+  const sscClasses = ["class9", "class10", "class9_10"];
+  if (sscClasses.includes(subjectClassId) && sscClasses.includes(studentClassId)) {
+    return true;
+  }
+
+  // HSC group (Class 11, Class 12, HSC)
+  const hscClasses = ["class11", "class12", "class11_12"];
+  if (hscClasses.includes(subjectClassId) && hscClasses.includes(studentClassId)) {
+    return true;
+  }
+
+  return false;
+}
+
+let subjectsMemoryCache: { [key: string]: { data: FirestoreSubject[]; timestamp: number } } = {};
+
+export function clearSubjectCache(): void {
+  subjectsMemoryCache = {};
+}
+
 /**
  * Dashboard-এর জন্য
  */
@@ -18,6 +43,13 @@ export async function getSubjects(
   classId?: string,
   group?: string
 ): Promise<FirestoreSubject[]> {
+  const cacheKey = `${classId || "all"}_${group || "all"}`;
+  const cached = subjectsMemoryCache[cacheKey];
+  // 30 seconds memory cache for fast client navigation
+  if (cached && Date.now() - cached.timestamp < 30000) {
+    return cached.data;
+  }
+
   try {
     const colRef = collection(db, "subjects");
     const snapshot = await getDocs(colRef);
@@ -31,26 +63,35 @@ export async function getSubjects(
       ...(docSnap.data() as Omit<FirestoreSubject, "id">),
     }));
 
-    // Filter by classId if provided and matching subjects exist
+    // 1. Filter by classId (স্মার্ট ম্যাচিং সহ)
     if (classId) {
-      const filteredByClass = docs.filter((s) => s.classId === classId);
+      const filteredByClass = docs.filter((s) => isClassMatching(s.classId, classId));
+      // যদি ওই ক্লাসের বিষয় ফায়ারবেসে থাকে তবে শুধু সেগুলোই দেখাবে,
+      // আর যদি ফায়ারবেসে ওই ক্লাসের বিষয় না থাকে তবে ফলব্যাক হিসেবে অল বিষয় দেখাবে
       if (filteredByClass.length > 0) {
         docs = filteredByClass;
       }
     }
 
-    // Filter by group if specified (shows subject if group is missing, 'all', or matches student's group)
-    if (group && group !== "all") {
-      const filteredByGroup = docs.filter(
-        (s) => !s.group || s.group === "all" || s.group === group
-      );
-      if (filteredByGroup.length > 0) {
-        docs = filteredByGroup;
-      }
-    }
+    // 2. Group filter — সঠিক logic:
+    //    - subject.group === "all" (বা undefined) → সকল স্টুডেন্ট দেখবে
+    //    - subject.group === "science" → শুধু science স্টুডেন্ট
+    //    - subject.group === "commerce" → শুধু commerce স্টুডেন্ট
+    //    - subject.group === "arts" → শুধু arts স্টুডেন্ট
+    docs = docs.filter((s) => {
+      const subjectGroup = (s.group || "all").toLowerCase();
+      if (subjectGroup === "all") return true;
+      if (!group || group.toLowerCase() === "all") return false;
+      return subjectGroup === group.toLowerCase();
+    });
 
-    // Client-side sort by order or name
+    // Client-side sort by order
     docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+
+    subjectsMemoryCache[cacheKey] = {
+      data: docs,
+      timestamp: Date.now(),
+    };
 
     return docs;
   } catch (err) {
@@ -58,6 +99,7 @@ export async function getSubjects(
     return [];
   }
 }
+
 
 /**
  * subject document id দিয়ে
