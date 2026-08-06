@@ -14,19 +14,13 @@ export type SubjectOption = {
 };
 
 function isClassMatching(subjectClassId?: string, studentClassId?: string): boolean {
-  if (!studentClassId || !subjectClassId) return true;
+  if (!studentClassId || !subjectClassId) return false;
+  // Exact match
   if (subjectClassId === studentClassId) return true;
-
-  const sscClasses = ["class9", "class10", "class9_10"];
-  if (sscClasses.includes(subjectClassId) && sscClasses.includes(studentClassId)) {
-    return true;
-  }
-
-  const hscClasses = ["class11", "class12", "class11_12"];
-  if (hscClasses.includes(subjectClassId) && hscClasses.includes(studentClassId)) {
-    return true;
-  }
-
+  // class9_10 subject is visible to class9 and class10 students
+  if (subjectClassId === "class9_10" && (studentClassId === "class9" || studentClassId === "class10" || studentClassId === "class9_10")) return true;
+  // class11_12 subject is visible to class11 and class12 students
+  if (subjectClassId === "class11_12" && (studentClassId === "class11" || studentClassId === "class12" || studentClassId === "class11_12")) return true;
   return false;
 }
 
@@ -71,11 +65,8 @@ export async function GET() {
     };
   });
 
-  // 1. Filter by classId (স্মার্ট ম্যাচিং সহ)
-  const filteredByClass = docsData.filter((s) => isClassMatching(s.classId, classId));
-  if (filteredByClass.length > 0) {
-    docsData = filteredByClass;
-  }
+  // 1. Strict filter by classId — only show subjects belonging to the student's exact class
+  docsData = docsData.filter((s) => isClassMatching(s.classId, classId));
 
   // 2. Group filter logic
   const subjects: SubjectOption[] = docsData.filter((s) => {

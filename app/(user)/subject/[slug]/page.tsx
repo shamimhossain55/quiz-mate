@@ -10,6 +10,9 @@ import ContinueLearningBanner from "@/components/subject/ContinueLearningBanner"
 import ChapterGrid from "@/components/subject/ChapterGrid";
 import { getUserResults } from "@/lib/firestore/results";
 
+import { getSubjectBySlug, getSubjectById } from "@/lib/firestore/subjects";
+import { FirestoreSubject } from "@/types/firestore";
+
 interface SubjectPageProps {
   params: Promise<{
     slug: string;
@@ -17,13 +20,32 @@ interface SubjectPageProps {
 }
 
 export default function SubjectPage({ params }: SubjectPageProps) {
-  const { slug } = use(params);
+  const { slug: rawSlug } = use(params);
+  const decodedSlug = decodeURIComponent(rawSlug);
   const router = useRouter();
   const { data: session } = useSession();
 
+  const [subjectData, setSubjectData] = useState<FirestoreSubject | null>(null);
   const [subjectProgress, setSubjectProgress] = useState(0);
-  const [latestChapterTitle, setLatestChapterTitle] = useState(`অধ্যায় ১: ${slug} পরিচিতি`);
-  const [latestChapterId, setLatestChapterId] = useState(`class6_${slug}_ch1`);
+  const [latestChapterTitle, setLatestChapterTitle] = useState(`অধ্যায় ১: ${decodedSlug} পরিচিতি`);
+  const [latestChapterId, setLatestChapterId] = useState(`class6_${decodedSlug}_ch1`);
+
+  useEffect(() => {
+    async function loadSubjectDetails() {
+      try {
+        const sub =
+          (await getSubjectBySlug(decodedSlug)) ||
+          (await getSubjectById(decodedSlug)) ||
+          (await getSubjectById(rawSlug));
+        if (sub) {
+          setSubjectData(sub);
+        }
+      } catch (err) {
+        console.error("Error loading subject info:", err);
+      }
+    }
+    loadSubjectDetails();
+  }, [decodedSlug, rawSlug]);
 
   useEffect(() => {
     async function loadProgress() {
@@ -31,7 +53,7 @@ export default function SubjectPage({ params }: SubjectPageProps) {
       try {
         const results = await getUserResults(session.user.email);
         const matched = results.filter(
-          (r) => r.chapterId && r.chapterId.toLowerCase().includes(slug.toLowerCase())
+          (r) => r.chapterId && r.chapterId.toLowerCase().includes(decodedSlug.toLowerCase())
         );
 
         if (matched.length > 0) {
@@ -60,7 +82,10 @@ export default function SubjectPage({ params }: SubjectPageProps) {
       }
     }
     loadProgress();
-  }, [session, slug]);
+  }, [session, decodedSlug]);
+
+  const displayName = subjectData?.name || decodedSlug;
+  const effectiveSubjectId = subjectData?.id || decodedSlug;
 
   return (
     <div className="h-screen font-sans flex flex-col relative overflow-hidden bg-slate-50 selection:bg-teal-500 selection:text-white">
@@ -76,14 +101,14 @@ export default function SubjectPage({ params }: SubjectPageProps) {
           <div className="flex items-center justify-between">
             <button
               onClick={() => router.push("/dashboard")}
-              className="h-10 w-10 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center text-slate-600 hover:text-slate-900 active:scale-95 transition-all"
+              className="h-10 w-10 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-center text-slate-600 hover:text-slate-900 active:scale-95 transition-all cursor-pointer"
             >
               <ArrowLeft width={18} height={18} />
             </button>
 
             <div className="flex items-center gap-1.5 bg-white border border-slate-200/80 rounded-2xl px-3 py-1.5 shadow-2xs">
               <BookOpen width={14} height={14} className="text-teal-600" />
-              <span className="text-xs font-black text-slate-900 capitalize">{slug}</span>
+              <span className="text-xs font-black text-slate-900 capitalize">{displayName}</span>
             </div>
 
             <div className="h-10 w-10" />
@@ -94,7 +119,7 @@ export default function SubjectPage({ params }: SubjectPageProps) {
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar">
 
           {/* Subject Header Banner */}
-          <SubjectHeader subjectName={slug} progress={subjectProgress} />
+          <SubjectHeader subjectName={displayName} progress={subjectProgress} />
 
           {/* Continue Learning Banner */}
           <ContinueLearningBanner
@@ -114,7 +139,7 @@ export default function SubjectPage({ params }: SubjectPageProps) {
               </div>
             </div>
 
-            <ChapterGrid subjectId={`class6_${slug}`} />
+            <ChapterGrid subjectId={effectiveSubjectId} />
           </div>
 
         </div>

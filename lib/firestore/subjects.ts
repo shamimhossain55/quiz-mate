@@ -12,21 +12,13 @@ import { db } from "@/lib/firebase-client";
 import { FirestoreSubject } from "@/types/firestore";
 
 function isClassMatching(subjectClassId?: string, studentClassId?: string): boolean {
-  if (!studentClassId || !subjectClassId) return true;
+  if (!studentClassId || !subjectClassId) return false;
+  // Exact match
   if (subjectClassId === studentClassId) return true;
-
-  // SSC group (Class 9, Class 10, SSC)
-  const sscClasses = ["class9", "class10", "class9_10"];
-  if (sscClasses.includes(subjectClassId) && sscClasses.includes(studentClassId)) {
-    return true;
-  }
-
-  // HSC group (Class 11, Class 12, HSC)
-  const hscClasses = ["class11", "class12", "class11_12"];
-  if (hscClasses.includes(subjectClassId) && hscClasses.includes(studentClassId)) {
-    return true;
-  }
-
+  // class9_10 subject is visible to class9 and class10 students
+  if (subjectClassId === "class9_10" && (studentClassId === "class9" || studentClassId === "class10" || studentClassId === "class9_10")) return true;
+  // class11_12 subject is visible to class11 and class12 students
+  if (subjectClassId === "class11_12" && (studentClassId === "class11" || studentClassId === "class12" || studentClassId === "class11_12")) return true;
   return false;
 }
 
@@ -63,14 +55,9 @@ export async function getSubjects(
       ...(docSnap.data() as Omit<FirestoreSubject, "id">),
     }));
 
-    // 1. Filter by classId (স্মার্ট ম্যাচিং সহ)
+    // 1. Strict filter by classId — only show subjects for the student's exact class
     if (classId) {
-      const filteredByClass = docs.filter((s) => isClassMatching(s.classId, classId));
-      // যদি ওই ক্লাসের বিষয় ফায়ারবেসে থাকে তবে শুধু সেগুলোই দেখাবে,
-      // আর যদি ফায়ারবেসে ওই ক্লাসের বিষয় না থাকে তবে ফলব্যাক হিসেবে অল বিষয় দেখাবে
-      if (filteredByClass.length > 0) {
-        docs = filteredByClass;
-      }
+      docs = docs.filter((s) => isClassMatching(s.classId, classId));
     }
 
     // 2. Group filter — সঠিক logic:

@@ -10,21 +10,6 @@ interface Props {
   subjectId: string;
 }
 
-const fallbackChapters: Chapter[] = [
-  // গদ্য সেকশন
-  { id: "ch1", subjectId: "bangla", name: "অধ্যায় ১: সততার পুরস্কার", author: "মুহম্মদ শহীদুল্লাহ", order: 1, sectionName: "গদ্য" },
-  { id: "ch2", subjectId: "bangla", name: "অধ্যায় ২: মিনু", author: "বনফুল", order: 2, sectionName: "গদ্য" },
-  { id: "ch3", subjectId: "bangla", name: "অধ্যায় ৩: নীল নদ আর পিরামিডের দেশ", author: "সৈয়দ মুজতবা আলী", order: 3, sectionName: "গদ্য" },
-  { id: "ch4", subjectId: "bangla", name: "অধ্যায় ৪: তোলপাড়", author: "শওকত ওসমান", order: 4, sectionName: "গদ্য" },
-  { id: "ch5", subjectId: "bangla", name: "অধ্যায় ৫: আকাশ", author: "আবদুল্লাহ আল-মুতী", order: 5, sectionName: "গদ্য" },
-  // কবিতা সেকশন
-  { id: "ch6", subjectId: "bangla", name: "অধ্যায় ৬: জন্মভূমি", author: "রবীন্দ্রনাথ ঠাকুর", order: 6, sectionName: "কবিতা" },
-  { id: "ch7", subjectId: "bangla", name: "অধ্যায় ৭: সুখ", author: "কামিনী রায়", order: 7, sectionName: "কবিতা" },
-  { id: "ch8", subjectId: "bangla", name: "অধ্যায় ৮: মানুষ জাতি", author: "সত্যেন্দ্রনাথ দত্ত", order: 8, sectionName: "কবিতা" },
-  { id: "ch9", subjectId: "bangla", name: "অধ্যায় ৯: ঝিঙে ফুল", author: "কাজী নজরুল ইসলাম", order: 9, sectionName: "কবিতা" },
-  { id: "ch10", subjectId: "bangla", name: "অধ্যায় ১০: আসমানি", author: "জসীমউদ্‌দীন", order: 10, sectionName: "কবিতা" },
-];
-
 export default function ChapterGrid({ subjectId }: Props) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,14 +19,10 @@ export default function ChapterGrid({ subjectId }: Props) {
     async function load() {
       try {
         const data = await getChapters(subjectId);
-        if (data.length > 0) {
-          setChapters(data);
-        } else {
-          // If fallback for bangla subject
-          setChapters(fallbackChapters);
-        }
+        setChapters(data);
       } catch (err) {
-        setChapters(fallbackChapters);
+        console.error("Error loading chapters:", err);
+        setChapters([]);
       } finally {
         setLoading(false);
       }

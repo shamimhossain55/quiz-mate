@@ -46,7 +46,7 @@ export default function Hero() {
         {/* ── MAIN HEADLINE & SUBTITLE ── */}
         <div className="text-center max-w-2xl mx-auto">
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-            পড়ালেখা হবে খেলা, <br className="hidden sm:block" />
+            পড়ালেখা হবে <span className="bg-gradient-to-r from-teal-600 via-emerald-600 to-indigo-600 bg-clip-text text-transparent">খেলায়</span>, <br className="hidden sm:block" />
             সাফল্য আসবে <span className="bg-gradient-to-r from-teal-600 via-emerald-600 to-indigo-600 bg-clip-text text-transparent">মেলায় 🚀</span>
           </h1>
 

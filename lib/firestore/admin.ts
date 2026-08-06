@@ -93,8 +93,8 @@ export async function getAllClasses(): Promise<AdminClass[]> {
         { id: "class6", name: "ষষ্ঠ শ্রেণী (Class 6)", order: 1 },
         { id: "class7", name: "সপ্তম শ্রেণী (Class 7)", order: 2 },
         { id: "class8", name: "অষ্টম শ্রেণী (Class 8)", order: 3 },
-        { id: "class9", name: "নবম শ্রেণী (Class 9)", order: 4 },
-        { id: "class10", name: "দশম শ্রেণী (Class 10)", order: 5 },
+        { id: "class9_10", name: "নবম-দশম শ্রেণী (Class 9-10 / SSC)", order: 4 },
+        { id: "class11_12", name: "একাদশ-দ্বাদশ শ্রেণী (Class 11-12 / HSC)", order: 5 },
       ];
     }
     return querySnapshot.docs.map((docSnap) => ({
@@ -108,8 +108,8 @@ export async function getAllClasses(): Promise<AdminClass[]> {
       { id: "class6", name: "ষষ্ঠ শ্রেণী (Class 6)", order: 1 },
       { id: "class7", name: "সপ্তম শ্রেণী (Class 7)", order: 2 },
       { id: "class8", name: "অষ্টম শ্রেণী (Class 8)", order: 3 },
-      { id: "class9", name: "নবম শ্রেণী (Class 9)", order: 4 },
-      { id: "class10", name: "দশম শ্রেণী (Class 10)", order: 5 },
+      { id: "class9_10", name: "নবম-দশম শ্রেণী (Class 9-10 / SSC)", order: 4 },
+      { id: "class11_12", name: "একাদশ-দ্বাদশ শ্রেণী (Class 11-12 / HSC)", order: 5 },
     ];
   }
 }
