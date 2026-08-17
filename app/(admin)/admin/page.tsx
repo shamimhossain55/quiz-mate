@@ -187,6 +187,7 @@ export default function AdminPage() {
   const [allChapters, setAllChapters] = useState<AdminChapter[]>([]);
   const [isAddChapterOpen, setIsAddChapterOpen] = useState(false);
   const [editingChapter, setEditingChapter] = useState<AdminChapter | null>(null);
+  const [chapterClassFilter, setChapterClassFilter] = useState<string>("all");
   const [chapterSubjectFilter, setChapterSubjectFilter] = useState<string>("all");
   const [newChapter, setNewChapter] = useState({ name: "", subjectId: "", chapterNo: 1, sectionName: "" });
 
@@ -1483,16 +1484,37 @@ export default function AdminPage() {
                         </h2>
                         <p className="text-[10px] text-slate-500">নির্দিষ্ট বিষয়ের আন্ডারে অধ্যায় তৈরি, সম্পাদনা এবং মুছুন</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* CLASS FILTER */}
+                        <div className="flex items-center gap-1.5 bg-slate-900 border border-indigo-500/30 rounded-xl px-2.5 py-1">
+                          <span className="text-[11px] font-bold text-indigo-400">🏫 ক্লাস:</span>
+                          <select
+                            value={chapterClassFilter}
+                            onChange={(e) => { setChapterClassFilter(e.target.value); setChapterSubjectFilter("all"); }}
+                            className="bg-transparent text-xs font-bold text-indigo-300 focus:outline-none cursor-pointer max-w-[130px]"
+                          >
+                            <option value="all" className="bg-slate-900 text-white">সকল ক্লাস</option>
+                            {classes.map((cls) => {
+                              const subjectsInClass = subjects.filter((s) => s.classId === cls.id);
+                              const chaptersInClass = allChapters.filter((c) => subjectsInClass.some((s) => s.id === c.subjectId)).length;
+                              return (
+                                <option key={cls.id} value={cls.id} className="bg-slate-900 text-white">
+                                  {cls.name} ({subjectsInClass.length}টি বিষয়, {chaptersInClass}টি অধ্যায়)
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                        {/* SUBJECT FILTER */}
                         <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1">
-                          <span className="text-[11px] font-bold text-slate-400">বিষয়:</span>
+                          <span className="text-[11px] font-bold text-slate-400">📚 বিষয়:</span>
                           <select
                             value={chapterSubjectFilter}
                             onChange={(e) => setChapterSubjectFilter(e.target.value)}
                             className="bg-transparent text-xs font-bold text-amber-400 focus:outline-none cursor-pointer max-w-[180px]"
                           >
-                            <option value="all" className="bg-slate-900 text-white">সকল বিষয় ({allChapters.length})</option>
-                            {subjects.map((s) => {
+                            <option value="all" className="bg-slate-900 text-white">সকল বিষয়</option>
+                            {(chapterClassFilter === "all" ? subjects : subjects.filter((s) => s.classId === chapterClassFilter)).map((s) => {
                               const count = allChapters.filter((c) => c.subjectId === s.id).length;
                               return (
                                 <option key={s.id} value={s.id} className="bg-slate-900 text-white">
@@ -1511,10 +1533,52 @@ export default function AdminPage() {
                       </div>
                     </div>
 
+                    {/* CLASS OVERVIEW PILLS — show when class filter is active */}
+                    {chapterClassFilter !== "all" && (() => {
+                      const subjectsInClass = subjects.filter((s) => s.classId === chapterClassFilter);
+                      const className = classes.find((c) => c.id === chapterClassFilter)?.name || chapterClassFilter;
+                      return (
+                        <div className="mb-4 p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/25 flex flex-wrap items-center gap-2">
+                          <span className="text-[11px] font-extrabold text-indigo-300 shrink-0">🏫 {className}-এ যুক্ত বিষয়সমূহ:</span>
+                          {subjectsInClass.length === 0 ? (
+                            <span className="text-[11px] text-slate-500 italic">কোনো বিষয় নেই</span>
+                          ) : (
+                            subjectsInClass.map((s) => {
+                              const count = allChapters.filter((c) => c.subjectId === s.id).length;
+                              const isActive = chapterSubjectFilter === s.id;
+                              return (
+                                <button
+                                  key={s.id}
+                                  onClick={() => setChapterSubjectFilter(isActive ? "all" : s.id)}
+                                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black transition-all border ${
+                                    isActive
+                                      ? "bg-amber-500/30 text-amber-200 border-amber-400/60 shadow shadow-amber-500/20"
+                                      : "bg-slate-800 text-slate-300 border-slate-700 hover:border-amber-500/40 hover:text-amber-300"
+                                  }`}
+                                >
+                                  {s.imageUrl && (
+                                    <img src={s.imageUrl} alt={s.name} className="w-4 h-4 rounded-full object-cover shrink-0" />
+                                  )}
+                                  <span style={{ color: s.color || undefined }}>{s.name}</span>
+                                  <span className="text-slate-500 font-bold">({count})</span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {(() => {
-                      const filteredChapters = chapterSubjectFilter === "all"
-                        ? allChapters
-                        : allChapters.filter((c) => c.subjectId === chapterSubjectFilter);
+                      const classFilteredSubjectIds = chapterClassFilter === "all"
+                        ? null
+                        : subjects.filter((s) => s.classId === chapterClassFilter).map((s) => s.id);
+
+                      const filteredChapters = allChapters.filter((c) => {
+                        if (classFilteredSubjectIds && !classFilteredSubjectIds.includes(c.subjectId)) return false;
+                        if (chapterSubjectFilter !== "all" && c.subjectId !== chapterSubjectFilter) return false;
+                        return true;
+                      });
 
                       if (filteredChapters.length === 0) {
                         return (
@@ -1549,18 +1613,44 @@ export default function AdminPage() {
                             const sortedChaps = [...chaps].sort((a, b) => a.chapterNo - b.chapterNo);
                             return (
                               <div key={subId} className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden">
-                                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-800/50 border-b border-slate-800">
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-3 w-3 rounded-full" style={{ background: sub?.color || "#0D9488" }} />
-                                    <span className="text-xs font-extrabold text-white">{sub?.name || subId}</span>
-                                    <span className="text-[9px] font-bold text-slate-500">({sortedChaps.length}টি অধ্যায়)</span>
+                                {/* Subject Header with Image */}
+                                <div className="relative overflow-hidden">
+                                  {sub?.imageUrl && (
+                                    <div className="absolute inset-0 z-0">
+                                      <img src={sub.imageUrl} alt={sub?.name || ""} className="w-full h-full object-cover opacity-15" />
+                                      <div className="absolute inset-0 bg-gradient-to-r from-slate-900/95 via-slate-900/80 to-transparent" />
+                                    </div>
+                                  )}
+                                  <div className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                                    <div className="flex items-center gap-3">
+                                      {sub?.imageUrl ? (
+                                        <div className="h-9 w-9 rounded-xl overflow-hidden border-2 shrink-0" style={{ borderColor: sub?.color || "#0D9488" }}>
+                                          <img src={sub.imageUrl} alt={sub?.name || ""} className="w-full h-full object-cover" />
+                                        </div>
+                                      ) : (
+                                        <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: (sub?.color || "#0D9488") + "33", border: `2px solid ${sub?.color || "#0D9488"}55` }}>
+                                          <div className="h-3 w-3 rounded-full" style={{ background: sub?.color || "#0D9488" }} />
+                                        </div>
+                                      )}
+                                      <div>
+                                        <span className="text-xs font-extrabold text-white">{sub?.name || subId}</span>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                          <span className="text-[9px] font-bold text-slate-500">{sortedChaps.length}টি অধ্যায়</span>
+                                          {sub?.classId && (
+                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                                              {classes.find((c) => c.id === sub.classId)?.name || sub.classId}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => handleOpenAddChapter(subId)}
+                                      className="flex items-center gap-1 text-[10px] font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg hover:bg-amber-500/20 transition-all"
+                                    >
+                                      <Plus width={10} height={10} /> অধ্যায় যোগ
+                                    </button>
                                   </div>
-                                  <button
-                                    onClick={() => handleOpenAddChapter(subId)}
-                                    className="flex items-center gap-1 text-[10px] font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg hover:bg-amber-500/20 transition-all"
-                                  >
-                                    <Plus width={10} height={10} /> অধ্যায় যোগ
-                                  </button>
                                 </div>
                                 <div className="divide-y divide-slate-800/60">
                                   {sortedChaps.map((ch) => (
