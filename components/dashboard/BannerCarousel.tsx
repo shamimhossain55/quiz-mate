@@ -84,6 +84,8 @@ export default function BannerCarousel({ slides = [] }: BannerCarouselProps) {
           <img
             src={currentBanner.imageUrl}
             alt={currentBanner.title}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover opacity-35 mix-blend-overlay transition-transform duration-700 group-hover:scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-black/30 to-transparent" />

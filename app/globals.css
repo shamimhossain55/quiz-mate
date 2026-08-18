@@ -12,36 +12,51 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  touch-action: manipulation;
+  overflow-x: hidden;
+}
+
+/* Hardware accelerated layer */
+.gpu-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
 }
 
 /* ======================== */
-/* Core Animations           */
+/* Core Animations (GPU Optimized) */
 /* ======================== */
 
 @keyframes ambient-float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(10px, -15px) scale(1.08); }
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6px, -10px, 0) scale(1.03); }
 }
 
 @keyframes shimmer-sweep {
-  0% { transform: translateX(-150%) skewX(-10deg); }
-  100% { transform: translateX(250%) skewX(-10deg); }
+  0% { transform: translate3d(-150%, 0, 0) skewX(-10deg); }
+  100% { transform: translate3d(250%, 0, 0) skewX(-10deg); }
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% { transform: translate3d(-100%, 0, 0); }
+  100% { transform: translate3d(100%, 0, 0); }
 }
 
 @keyframes flame-pulse {
-  0%, 100% { opacity: 0.95; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.1); filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.6)); }
+  0%, 100% { opacity: 0.95; transform: scale3d(1, 1, 1); }
+  50% { opacity: 1; transform: scale3d(1.08, 1.08, 1); }
 }
 
 /* Slow rotating gradient ring for avatar */
@@ -59,9 +74,9 @@ body {
 
 /* XP bar shimmer for full/active */
 @keyframes xp-shimmer {
-  0% { transform: translateX(-100%) skewX(-15deg); opacity: 0; }
+  0% { transform: translate3d(-100%, 0, 0) skewX(-15deg); opacity: 0; }
   50% { opacity: 1; }
-  100% { transform: translateX(300%) skewX(-15deg); opacity: 0; }
+  100% { transform: translate3d(300%, 0, 0) skewX(-15deg); opacity: 0; }
 }
 
 /* Banner blur gradient transition at bottom */
@@ -75,26 +90,34 @@ body {
 /* ======================== */
 
 .animate-ambient-float {
-  animation: ambient-float 8s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  animation: ambient-float 10s ease-in-out infinite;
 }
 
 .animate-shimmer {
+  will-change: transform;
   animation: shimmer 2.5s infinite;
 }
 
 .animate-shimmer-sweep {
+  will-change: transform;
   animation: shimmer-sweep 2.8s ease-in-out infinite;
 }
 
 .animate-flame-pulse {
+  will-change: transform, opacity;
   animation: flame-pulse 2s ease-in-out infinite;
 }
 
 .animate-avatar-ring {
+  will-change: transform;
   animation: avatar-ring-rotate 6s linear infinite;
 }
 
 .animate-xp-shimmer {
+  will-change: transform;
   animation: xp-shimmer 2.4s ease-in-out infinite;
 }
 

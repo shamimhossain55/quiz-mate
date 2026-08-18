@@ -84,44 +84,38 @@ export default function DashboardPage() {
     async function loadData() {
       const avatarKey = session?.user?.email ? `qm_avatar_${session.user.email.toLowerCase()}` : null;
       try {
-        let currentStudentProfile: any = null;
-        try {
-          const pRes = await fetch("/api/profile");
-          const pData = await pRes.json();
-          if (pRes.ok && pData.student) {
-            currentStudentProfile = pData.student;
-            setStudent(pData.student);
-            if (pData.student.avatarUrl && avatarKey) {
-              setUserAvatar(pData.student.avatarUrl);
-              localStorage.setItem(avatarKey, pData.student.avatarUrl);
-            } else if (!pData.student.avatarUrl) {
-              if (avatarKey) localStorage.removeItem(avatarKey);
-              setUserAvatar(null);
-            }
-          }
-        } catch {}
+        // Parallelize initial queries (profile, banners, results) for maximum speed
+        const [profileRes, activeBanners, userResults] = await Promise.all([
+          fetch("/api/profile").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          getActiveBanners().catch(() => []),
+          userEmail ? getUserResults(userEmail).catch(() => []) : Promise.resolve([]),
+        ]);
 
-        if (currentStudentProfile && currentStudentProfile.profileComplete === false) {
-          router.replace("/onboarding");
-          return;
-        }
+        let currentStudentProfile = profileRes?.student || null;
 
+        // Fallback to direct student profile if api/profile returned empty
         if (!currentStudentProfile && session?.user?.email) {
-          currentStudentProfile = await getStudentProfile(session.user.email);
-          if (currentStudentProfile) {
-            setStudent(currentStudentProfile);
-            if (currentStudentProfile.avatarUrl && avatarKey) {
-              setUserAvatar(currentStudentProfile.avatarUrl);
-              localStorage.setItem(avatarKey, currentStudentProfile.avatarUrl);
-            } else if (!currentStudentProfile.avatarUrl) {
-              if (avatarKey) localStorage.removeItem(avatarKey);
-              setUserAvatar(null);
-            }
+          currentStudentProfile = await getStudentProfile(session.user.email).catch(() => null);
+        }
+
+        if (currentStudentProfile) {
+          setStudent(currentStudentProfile);
+          if (currentStudentProfile.avatarUrl && avatarKey) {
+            setUserAvatar(currentStudentProfile.avatarUrl);
+            try { localStorage.setItem(avatarKey, currentStudentProfile.avatarUrl); } catch (e) {}
+          } else if (!currentStudentProfile.avatarUrl && avatarKey) {
+            try { localStorage.removeItem(avatarKey); } catch (e) {}
+            setUserAvatar(null);
+          }
+
+          if (currentStudentProfile.profileComplete === false) {
+            router.replace("/onboarding");
+            return;
           }
         }
 
-        const activeBanners = await getActiveBanners();
         setBannerList(activeBanners || []);
+        setUserResultsList(userResults || []);
 
         let localImages: Record<string, string> = {};
         try {
@@ -132,12 +126,7 @@ export default function DashboardPage() {
         const targetClassId = currentStudentProfile?.classId || "class6";
         const targetGroup = currentStudentProfile?.group || "all";
 
-        const [firestoreSubjects, userResults] = await Promise.all([
-          getSubjects(targetClassId, targetGroup),
-          userEmail ? getUserResults(userEmail) : Promise.resolve([]),
-        ]);
-
-        setUserResultsList(userResults || []);
+        const firestoreSubjects = await getSubjects(targetClassId, targetGroup).catch(() => []);
 
         if (firestoreSubjects && firestoreSubjects.length > 0) {
           const mapped: SubjectItem[] = firestoreSubjects.map((s, idx) => {

@@ -17,6 +17,7 @@ import { getQuestions } from "@/lib/firestore/questions";
 import { Question } from "@/types/firestore";
 import { saveResult } from "@/lib/quiz/saveResult";
 import { updateStudentStats } from "@/lib/firestore/student";
+import { shuffleArray } from "@/lib/utils";
 
 export default function QuizPlayPage() {
   const { data: session } = useSession();
@@ -45,19 +46,21 @@ export default function QuizPlayPage() {
         return;
       }
       const data = await getQuestions(config.chapterId, config.subjectId);
-      setQuestions(data);
+      // Shuffle all questions randomly so user gets a randomized set/order on every quiz
+      const shuffled = shuffleArray(data);
+      const selected = config.questionCount ? shuffled.slice(0, config.questionCount) : shuffled;
+      setQuestions(selected);
       // questions গুলো context-এ persist করো যাতে review page re-fetch না করে
-      setPlayedQuestions(data);
+      setPlayedQuestions(selected);
       resetTimer((config.timeLimit || 10) * 60);
       setLoading(false);
     }
     loadQuestions();
-  }, [config.chapterId, config.subjectId, config.timeLimit, router, resetTimer, setPlayedQuestions]);
+  }, [config.chapterId, config.subjectId, config.timeLimit, config.questionCount, router, resetTimer, setPlayedQuestions]);
 
-  const totalQuestions = Math.min(
-    config.questionCount || 10,
-    questions.length > 0 ? questions.length : config.questionCount || 10
-  );
+  const totalQuestions = questions.length > 0
+    ? questions.length
+    : config.questionCount || 10;
 
   const handleFinish = useCallback(async () => {
     let score = 0;
