@@ -36,26 +36,13 @@ export default function ContinueLearningSection({ subjectsList = [] }: ContinueL
   return (
     <div
       onClick={() => router.push(`/subject/${activeSubject.slug}`)}
-      className="relative rounded-3xl p-4 overflow-hidden border border-white/30 shadow-[0_12px_28px_rgba(15,23,42,0.1)] cursor-pointer active:scale-98 hover:-translate-y-0.5 transition-all group"
+      className="relative rounded-3xl p-4 overflow-hidden border border-white/30 shadow-[0_12px_28px_rgba(15,23,42,0.15)] cursor-pointer active:scale-98 hover:-translate-y-0.5 transition-all group"
       style={{
         background: activeSubject.gradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)",
       }}
     >
-      {/* Background Image if available */}
-      {activeSubject.imageUrl && (
-        <div className="absolute inset-0 z-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={activeSubject.imageUrl}
-            alt={activeSubject.name}
-            className="w-full h-full object-cover opacity-20 group-hover:scale-105 transition-transform duration-500"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-900/60 to-transparent" />
-        </div>
-      )}
-
-      {/* Decorative Orbs */}
-      <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
+      {/* Subtle Ambient Glow */}
+      <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/15 rounded-full blur-xl pointer-events-none" />
       <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-amber-400/20 rounded-full blur-lg pointer-events-none" />
 
       <div className="relative z-10">
@@ -73,14 +60,32 @@ export default function ContinueLearningSection({ subjectsList = [] }: ContinueL
           </span>
         </div>
 
-        {/* Title and Progress */}
-        <div className="mt-1">
-          <h3 className="text-lg font-black text-white leading-tight drop-shadow-xs group-hover:text-amber-200 transition-colors">
-            {activeSubject.name}
-          </h3>
-          <p className="text-[10px] text-teal-100/90 font-semibold mt-0.5">
-            আপনার পাঠ্যসূচির অগ্রগতি বজায় রাখুন
-          </p>
+        {/* Content Area: Left info + Right 3D Book Cover if available */}
+        <div className="flex items-center justify-between gap-3 mt-1.5">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-black text-white leading-tight drop-shadow-xs group-hover:text-amber-200 transition-colors truncate">
+              {activeSubject.name}
+            </h3>
+            <p className="text-[10px] text-teal-100/90 font-semibold mt-0.5 truncate">
+              আপনার পাঠ্যসূচির অগ্রগতি বজায় রাখুন
+            </p>
+          </div>
+
+          {/* 3D Realistic Book Cover Showcase */}
+          {activeSubject.imageUrl && (
+            <div className="relative w-11 h-14 rounded-lg overflow-hidden flex-shrink-0 shadow-lg border border-white/30 group-hover:scale-108 group-hover:rotate-2 transition-transform duration-300 bg-slate-900">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={activeSubject.imageUrl}
+                alt={activeSubject.name}
+                className="w-full h-full object-cover"
+              />
+              {/* Book Spine */}
+              <div className="absolute top-0 bottom-0 left-0 w-1 bg-gradient-to-r from-black/60 to-transparent border-r border-white/20 pointer-events-none" />
+              {/* Page top lines */}
+              <div className="absolute top-0 right-1 left-1 h-0.5 bg-white/40 pointer-events-none" />
+            </div>
+          )}
         </div>
 
         {/* Progress bar */}

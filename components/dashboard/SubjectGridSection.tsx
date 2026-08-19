@@ -102,10 +102,11 @@ export default function SubjectGridSection({ subjectsList = [], isLoading = fals
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-3 gap-2.5 sm:gap-3.5">
           {filteredSubjects.map((subject) => {
             const totalCh = subject.chaptersCount || 0;
             const completedCh = subject.completedChapters || 0;
+            const isCompleted = subject.progress >= 100;
 
             return (
               <motion.div
@@ -114,76 +115,101 @@ export default function SubjectGridSection({ subjectsList = [], isLoading = fals
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => router.push(`/subject/${subject.slug}`)}
-                className="relative rounded-2xl p-2 flex flex-col justify-between cursor-pointer hover:-translate-y-1 transition-all duration-300 overflow-hidden group aspect-[3/4] min-h-[145px] border border-white/25 shadow-lg select-none"
-                style={{
-                  background: subject.gradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 100%)",
-                  boxShadow: `0 10px 22px ${subject.shadowColor || "rgba(13,148,136,0.3)"}`,
-                }}
+                className="group cursor-pointer flex flex-col select-none"
               >
-                {/* Subject Cover Image */}
-                {subject.imageUrl ? (
-                  <div className="absolute inset-0 z-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={subject.imageUrl}
-                      alt={subject.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent" />
+                {/* 1. 3D REALISTIC BOOK COVER CONTAINER */}
+                <div
+                  className="relative aspect-[3/4.2] rounded-xl overflow-hidden shadow-[0_6px_16px_rgba(15,23,42,0.12)] group-hover:shadow-[0_12px_24px_rgba(15,23,42,0.22)] group-hover:-translate-y-1.5 transition-all duration-300 border border-slate-200/80 bg-slate-900 flex flex-col justify-between"
+                  style={{
+                    boxShadow: subject.shadowColor ? `0 8px 20px ${subject.shadowColor}` : undefined,
+                  }}
+                >
+                  {/* Book Cover Artwork Image */}
+                  {subject.imageUrl ? (
+                    <div className="absolute inset-0 z-0 bg-slate-800">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={subject.imageUrl}
+                        alt={subject.name}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                      />
+                    </div>
+                  ) : (
+                    /* Fallback when no image: Vivid Subject Palette & Icon */
+                    <div
+                      className="absolute inset-0 z-0 flex flex-col items-center justify-center p-2 text-white"
+                      style={{
+                        background: subject.gradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 100%)",
+                      }}
+                    >
+                      <div className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/25 shadow-inner group-hover:scale-110 transition-transform">
+                        <BookOpen width={20} height={20} className="text-white" />
+                      </div>
+                      <span className="mt-2 text-[10px] font-black text-center line-clamp-2 px-1 text-white drop-shadow-xs">
+                        {subject.name}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 3D Real Book Spine (Left Fold & Shadow) */}
+                  <div className="absolute top-0 bottom-0 left-0 w-2.5 bg-gradient-to-r from-black/60 via-black/25 to-transparent border-r border-white/20 pointer-events-none z-10" />
+
+                  {/* Top & Right Paper Page Stack Line */}
+                  <div className="absolute top-0 right-1.5 left-2 h-0.5 bg-white/40 pointer-events-none z-10" />
+                  <div className="absolute top-1.5 bottom-1.5 right-0 w-0.5 bg-white/25 pointer-events-none z-10" />
+
+                  {/* Glossy Sheen Light Reflection */}
+                  <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/12 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none z-10" />
+
+                  {/* Top Floating Glass Status Badge */}
+                  <div className="relative z-20 flex justify-end p-1.5">
+                    {isCompleted ? (
+                      <span className="flex items-center gap-0.5 bg-emerald-500 text-white text-[7.5px] font-black px-1.5 py-0.2 rounded-full shadow-xs border border-white/20">
+                        <CheckCircle2 width={8} height={8} />
+                        ১০০%
+                      </span>
+                    ) : subject.progress > 0 ? (
+                      <span className="flex items-center gap-0.5 bg-slate-950/80 backdrop-blur-md text-amber-300 text-[8px] font-black px-1.5 py-0.2 rounded-full border border-white/20 shadow-xs">
+                        <Zap width={7} height={7} className="fill-amber-300" />
+                        {subject.progress}%
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-0.5 bg-black/40 backdrop-blur-xs text-white/90 text-[7.5px] font-bold px-1.5 py-0.2 rounded-full border border-white/15">
+                        নতুন
+                      </span>
+                    )}
                   </div>
-                ) : null}
 
-                {/* 3D Real Book Spine Edge */}
-                <div className="absolute top-0 bottom-0 left-0 w-2.5 bg-gradient-to-r from-black/60 via-black/30 to-transparent border-r border-white/20 pointer-events-none z-10" />
-
-                {/* Top Page Stack Paper Lines Effect */}
-                <div className="absolute top-0 right-2.5 left-2.5 h-0.5 bg-white/30 rounded-b pointer-events-none z-10" />
-
-                {/* Ambient Floating Glow Orb */}
-                <div className="absolute -top-5 -right-5 w-14 h-14 bg-white/15 rounded-full blur-md pointer-events-none group-hover:scale-150 transition-transform duration-500 z-10" />
-
-                {/* Top Row: Progress Badge */}
-                <div className="flex items-center justify-end relative z-10">
-                  <div className="flex items-center gap-0.5 bg-black/40 backdrop-blur-md px-1.5 py-0.2 rounded-full border border-white/20 text-[8px] font-black text-white shadow-2xs">
-                    <Zap width={8} height={8} className="text-amber-300 fill-amber-300" />
-                    <span>{subject.progress}%</span>
-                  </div>
-                </div>
-
-                {/* Middle & Bottom: Subject Info */}
-                <div className="relative z-10 mt-auto pt-1 pl-0.5">
-                  <span className="text-[7.5px] font-black text-amber-200 uppercase tracking-tight bg-black/30 backdrop-blur-xs px-1 py-0.2 rounded border border-white/15 inline-block mb-0.5">
-                    {totalCh > 0 ? `${completedCh}/${totalCh} অধ্যায়` : `${completedCh}টি অধ্যায়`}
-                  </span>
-
-                  <h4 className="text-[11.5px] font-black text-white leading-snug truncate group-hover:text-amber-200 transition-colors">
-                    {subject.name}
-                  </h4>
-
-                  <p className="text-[8px] font-semibold text-white/80 truncate mt-0.5">
-                    {subject.tagline || "পাঠ্যবই ও অনুশীলন"}
-                  </p>
-
-                  {/* Progress Bar & Read Action */}
-                  <div className="mt-1.5 space-y-0.5">
-                    <div className="h-1 w-full rounded-full bg-black/40 overflow-hidden border border-white/15">
+                  {/* Bottom Integrated Micro Progress Bar on the Book */}
+                  {subject.progress > 0 && (
+                    <div className="relative z-20 h-1 w-full bg-black/50 backdrop-blur-xs">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-amber-300 via-yellow-200 to-white shadow-[0_0_8px_rgba(255,255,255,0.9)] transition-all duration-700"
+                        className={`h-full transition-all duration-500 ${
+                          isCompleted
+                            ? "bg-emerald-400"
+                            : "bg-gradient-to-r from-teal-400 via-amber-300 to-yellow-300"
+                        }`}
                         style={{ width: `${Math.max(5, subject.progress)}%` }}
                       />
                     </div>
+                  )}
+                </div>
 
-                    <div className="flex items-center justify-between pt-0.5 text-[8px] font-black text-white/90">
-                      <span className="group-hover:text-amber-200 transition-colors truncate">পড়া শুরু</span>
-                      <div className="h-3.5 w-3.5 rounded-full bg-white/25 backdrop-blur-md flex items-center justify-center border border-white/30 group-hover:bg-white group-hover:text-slate-900 transition-all flex-shrink-0">
-                        <ChevronRight width={8} height={8} className="text-white group-hover:text-slate-900 transition-colors" />
-                      </div>
-                    </div>
-                  </div>
+                {/* 2. CLEAN TYPOGRAPHY & CHAPTER META (BELOW THE 3D BOOK) */}
+                <div className="mt-2 text-center px-0.5 space-y-0.5">
+                  <h4 className="text-[11px] font-black text-slate-800 leading-tight truncate group-hover:text-teal-600 transition-colors">
+                    {subject.name}
+                  </h4>
+                  <p className="text-[9px] font-bold text-slate-600 flex items-center justify-center gap-1">
+                    <BookOpen width={9} height={9} className="text-slate-400 flex-shrink-0" />
+                    <span>
+                      {totalCh > 0 ? `${completedCh}/${totalCh} অধ্যায়` : "অনুশীলন শুরু"}
+                    </span>
+                  </p>
                 </div>
               </motion.div>
             );
