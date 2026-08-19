@@ -11,7 +11,8 @@ import ChapterGrid from "@/components/subject/ChapterGrid";
 import { getUserResults } from "@/lib/firestore/results";
 
 import { getSubjectBySlug, getSubjectById } from "@/lib/firestore/subjects";
-import { FirestoreSubject } from "@/types/firestore";
+import { getChapters } from "@/lib/firestore/chapters";
+import { FirestoreSubject, Chapter } from "@/types/firestore";
 
 interface SubjectPageProps {
   params: Promise<{
@@ -26,6 +27,7 @@ export default function SubjectPage({ params }: SubjectPageProps) {
   const { data: session } = useSession();
 
   const [subjectData, setSubjectData] = useState<FirestoreSubject | null>(null);
+  const [chaptersList, setChaptersList] = useState<Chapter[]>([]);
   const [subjectProgress, setSubjectProgress] = useState(0);
   const [latestChapterTitle, setLatestChapterTitle] = useState(`অধ্যায় ১: ${decodedSlug} পরিচিতি`);
   const [latestChapterId, setLatestChapterId] = useState(`class6_${decodedSlug}_ch1`);
@@ -40,6 +42,9 @@ export default function SubjectPage({ params }: SubjectPageProps) {
         if (sub) {
           setSubjectData(sub);
         }
+        const effectiveId = sub?.id || decodedSlug;
+        const chs = await getChapters(effectiveId);
+        setChaptersList(chs);
       } catch (err) {
         console.error("Error loading subject info:", err);
       }
@@ -53,21 +58,36 @@ export default function SubjectPage({ params }: SubjectPageProps) {
       try {
         const results = await getUserResults(session.user.email);
         const matched = results.filter(
-          (r) => r.chapterId && r.chapterId.toLowerCase().includes(decodedSlug.toLowerCase())
+          (r) =>
+            r.chapterId &&
+            (r.chapterId.toLowerCase().includes(decodedSlug.toLowerCase()) ||
+              (subjectData?.id && r.chapterId.toLowerCase().includes(subjectData.id.toLowerCase())) ||
+              chaptersList.some((ch) => ch.id.toLowerCase() === r.chapterId?.toLowerCase()))
         );
 
         if (matched.length > 0) {
-          const avgPct = Math.round(
-            matched.reduce(
-              (acc, r) =>
-                acc +
-                (r.percentage !== undefined
-                  ? r.percentage
-                  : Math.round((r.score / Math.max(1, r.correct + r.wrong)) * 100)),
-              0
-            ) / matched.length
-          );
-          setSubjectProgress(avgPct);
+          if (chaptersList.length > 0) {
+            const completedCount = chaptersList.filter((ch) => {
+              const chIdLower = ch.id.toLowerCase();
+              return matched.some((r) => {
+                const rChLower = (r.chapterId || "").toLowerCase();
+                return rChLower === chIdLower || rChLower.includes(chIdLower) || chIdLower.includes(rChLower);
+              });
+            }).length;
+            setSubjectProgress(Math.round((completedCount / chaptersList.length) * 100));
+          } else {
+            const avgPct = Math.round(
+              matched.reduce(
+                (acc, r) =>
+                  acc +
+                  (r.percentage !== undefined
+                    ? r.percentage
+                    : Math.round((r.score / Math.max(1, r.correct + r.wrong)) * 100)),
+                0
+              ) / matched.length
+            );
+            setSubjectProgress(avgPct);
+          }
 
           // Get latest attempt
           const latest = matched[0];
@@ -82,7 +102,7 @@ export default function SubjectPage({ params }: SubjectPageProps) {
       }
     }
     loadProgress();
-  }, [session, decodedSlug]);
+  }, [session, decodedSlug, subjectData, chaptersList]);
 
   const displayName = subjectData?.name || decodedSlug;
   const effectiveSubjectId = subjectData?.id || decodedSlug;
@@ -119,7 +139,11 @@ export default function SubjectPage({ params }: SubjectPageProps) {
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar">
 
           {/* Subject Header Banner */}
-          <SubjectHeader subjectName={displayName} progress={subjectProgress} />
+          <SubjectHeader
+            subjectName={displayName}
+            totalChapters={chaptersList.length > 0 ? chaptersList.length : undefined}
+            progress={subjectProgress}
+          />
 
           {/* Continue Learning Banner */}
           <ContinueLearningBanner

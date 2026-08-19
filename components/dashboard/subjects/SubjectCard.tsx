@@ -3,6 +3,8 @@ import { FirestoreSubject } from "@/types/firestore";
 
 type SubjectCardData = FirestoreSubject & {
   iconComponent: React.ElementType;
+  chaptersCount?: number;
+  completedChapters?: number;
 };
 
 interface SubjectCardProps {
@@ -98,10 +100,17 @@ export default function SubjectCard({
 
         {/* Footer info */}
         <div className="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between relative z-10">
-          <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
-            <Zap width={12} height={12} className="text-amber-400 fill-amber-400" />
-            অনুশীলন শুরু করো
-          </span>
+          {subject.chaptersCount !== undefined && subject.chaptersCount > 0 ? (
+            <span className="text-xs font-bold text-teal-400 flex items-center gap-1">
+              <BookOpen width={12} height={12} />
+              {subject.completedChapters || 0}/{subject.chaptersCount} অধ্যায়
+            </span>
+          ) : (
+            <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+              <Zap width={12} height={12} className="text-amber-400 fill-amber-400" />
+              অনুশীলন শুরু করো
+            </span>
+          )}
 
           <span className="text-xs font-extrabold text-teal-400 group-hover:underline">
             এক্সপ্লোর →

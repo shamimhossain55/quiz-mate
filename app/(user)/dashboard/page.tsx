@@ -14,6 +14,13 @@ import { getSubjects } from "@/lib/firestore/subjects";
 import { getStudentProfile } from "@/lib/firestore/student";
 import { getActiveBanners, BannerSlide } from "@/lib/firestore/banners";
 import { getUserResults } from "@/lib/firestore/results";
+import { getAllChapters, matchChapterToSubject } from "@/lib/firestore/chapters";
+import {
+  getDailyMissionsConfig,
+  getDailyMissionsSettings,
+  DailyMissionConfig,
+  DailyMissionsGlobalSettings,
+} from "@/lib/firestore/missions";
 import { Student } from "@/types/firestore";
 
 const defaultPalette = [
@@ -47,6 +54,8 @@ export default function DashboardPage() {
   const [greeting, setGreeting] = useState("শুভ দিন");
   const [greetingEmoji, setGreetingEmoji] = useState("✨");
   const [userResultsList, setUserResultsList] = useState<any[]>([]);
+  const [dailyMissionsList, setDailyMissionsList] = useState<DailyMissionConfig[]>([]);
+  const [missionsSettings, setMissionsSettings] = useState<DailyMissionsGlobalSettings | null>(null);
 
   useEffect(() => {
     const userEmail = session?.user?.email?.toLowerCase() || null;
@@ -71,8 +80,26 @@ export default function DashboardPage() {
       loadData();
     };
 
+    const handlePointsUpdated = (e: any) => {
+      if (e.detail?.newPoints !== undefined) {
+        setStudent((prev) => {
+          if (!prev) return prev;
+          const newPts = e.detail.newPoints;
+          return {
+            ...prev,
+            point: newPts,
+            level: Math.floor(newPts / 100) + 1,
+          };
+        });
+      } else {
+        loadData();
+      }
+    };
+
     window.addEventListener("qm_avatar_updated", handleAvatarUpdate);
     window.addEventListener("qm_subjects_updated", handleSubjectsUpdate);
+    window.addEventListener("qm_points_updated", handlePointsUpdated);
+    window.addEventListener("qm_profile_updated", handleSubjectsUpdate);
     window.addEventListener("storage", handleAvatarUpdate);
 
     const hour = new Date().getHours();
@@ -84,11 +111,21 @@ export default function DashboardPage() {
     async function loadData() {
       const avatarKey = session?.user?.email ? `qm_avatar_${session.user.email.toLowerCase()}` : null;
       try {
-        // Parallelize initial queries (profile, banners, results) for maximum speed
-        const [profileRes, activeBanners, userResults] = await Promise.all([
+        // Parallelize queries (profile, banners, results, chapters, missions) for maximum speed
+        const [
+          profileRes,
+          activeBanners,
+          userResults,
+          allChapters,
+          missionsConfig,
+          missionSettingsRes,
+        ] = await Promise.all([
           fetch("/api/profile").then((r) => (r.ok ? r.json() : null)).catch(() => null),
           getActiveBanners().catch(() => []),
           userEmail ? getUserResults(userEmail).catch(() => []) : Promise.resolve([]),
+          getAllChapters().catch(() => []),
+          getDailyMissionsConfig().catch(() => []),
+          getDailyMissionsSettings().catch(() => null),
         ]);
 
         let currentStudentProfile = profileRes?.student || null;
@@ -116,6 +153,8 @@ export default function DashboardPage() {
 
         setBannerList(activeBanners || []);
         setUserResultsList(userResults || []);
+        if (missionsConfig && missionsConfig.length > 0) setDailyMissionsList(missionsConfig);
+        if (missionSettingsRes) setMissionsSettings(missionSettingsRes);
 
         let localImages: Record<string, string> = {};
         try {
@@ -133,26 +172,57 @@ export default function DashboardPage() {
             const pal = defaultPalette[idx % defaultPalette.length];
             const img = s.imageUrl || localImages[s.id] || localImages[s.slug];
             const subSlug = (s.slug || s.id).toLowerCase();
+            const subId = s.id.toLowerCase();
 
+            // Find all chapters matching this subject
+            const subjectChapters = allChapters.filter((ch) => matchChapterToSubject(ch, s));
+            const totalChaptersCount = subjectChapters.length;
+
+            // Results matching this subject
             const matchingResults = userResults.filter(
               (r) =>
                 r.chapterId &&
-                (r.chapterId.toLowerCase().includes(subSlug) || r.chapterId.toLowerCase().includes(s.id.toLowerCase()))
+                (r.chapterId.toLowerCase().includes(subSlug) ||
+                  r.chapterId.toLowerCase().includes(subId) ||
+                  subjectChapters.some((ch) => ch.id.toLowerCase() === r.chapterId?.toLowerCase()))
             );
 
-            const subProgress =
-              matchingResults.length > 0
-                ? Math.round(
-                    matchingResults.reduce(
-                      (acc, curr) =>
-                        acc +
-                        (curr.percentage !== undefined
-                          ? curr.percentage
-                          : Math.round((curr.score / Math.max(1, curr.correct + curr.wrong)) * 100)),
-                      0
-                    ) / matchingResults.length
-                  )
-                : 0;
+            // Count completed chapters for this subject
+            let completedChaptersCount = 0;
+            if (totalChaptersCount > 0) {
+              completedChaptersCount = subjectChapters.filter((ch) => {
+                const chIdLower = ch.id.toLowerCase();
+                return userResults.some((r) => {
+                  if (!r.chapterId) return false;
+                  const rChLower = r.chapterId.toLowerCase();
+                  return (
+                    rChLower === chIdLower ||
+                    rChLower.includes(chIdLower) ||
+                    chIdLower.includes(rChLower)
+                  );
+                });
+              }).length;
+            } else {
+              const uniqueChIds = new Set(matchingResults.map((r) => r.chapterId?.toLowerCase()).filter(Boolean));
+              completedChaptersCount = uniqueChIds.size;
+            }
+
+            // Calculate progress percentage
+            let subProgress = 0;
+            if (totalChaptersCount > 0) {
+              subProgress = Math.round((completedChaptersCount / totalChaptersCount) * 100);
+            } else if (matchingResults.length > 0) {
+              subProgress = Math.round(
+                matchingResults.reduce(
+                  (acc, curr) =>
+                    acc +
+                    (curr.percentage !== undefined
+                      ? curr.percentage
+                      : Math.round((curr.score / Math.max(1, curr.correct + curr.wrong)) * 100)),
+                  0
+                ) / matchingResults.length
+              );
+            }
 
             return {
               id: s.id,
@@ -162,8 +232,8 @@ export default function DashboardPage() {
               gradient: s.color ? `linear-gradient(135deg, ${s.color} 0%, #0F766E 100%)` : pal.gradient,
               shadowColor: s.color ? `${s.color}60` : pal.shadowColor,
               progress: subProgress,
-              chaptersCount: 0,
-              completedChapters: matchingResults.length,
+              chaptersCount: totalChaptersCount,
+              completedChapters: completedChaptersCount,
               tagline: s.description || "পাঠ্যবই ও অনুশীলনী",
               imageUrl: img,
             };
@@ -189,11 +259,34 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener("qm_avatar_updated", handleAvatarUpdate);
       window.removeEventListener("qm_subjects_updated", handleSubjectsUpdate);
+      window.removeEventListener("qm_points_updated", handlePointsUpdated);
+      window.removeEventListener("qm_profile_updated", handleSubjectsUpdate);
       window.removeEventListener("storage", handleAvatarUpdate);
     };
-  }, [session]);
+  }, [session, router]);
 
-  const totalCorrect = userResultsList.reduce((acc, curr) => acc + (curr.correct || 0), 0);
+  // Today's results calculation for dynamic Daily Missions & Target
+  const todayDateString = new Date().toDateString();
+  const todayResults = userResultsList.filter((r) => {
+    if (!r.createdAt) return false;
+    const itemDate = r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt);
+    return itemDate.toDateString() === todayDateString;
+  });
+
+  const todayExamsPlayed = todayResults.length;
+  const todayCorrectAnswers = todayResults.reduce((acc, curr) => acc + (curr.correct || 0), 0);
+  const todayHighestScore = todayResults.reduce((max, curr) => Math.max(max, curr.percentage || 0), 0);
+
+  const handlePointsClaimed = (newPoints: number, newLevel: number) => {
+    setStudent((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        point: newPoints,
+        level: newLevel,
+      };
+    });
+  };
 
   return (
     <div className="h-screen font-sans flex flex-col relative overflow-hidden bg-slate-50 selection:bg-teal-500 selection:text-white">
@@ -230,9 +323,13 @@ export default function DashboardPage() {
 
           {/* 5. GAMIFIED DAILY MISSIONS & REWARDS */}
           <DailyMissionsCard
-            totalExamsPlayed={student?.totalExam || userResultsList.length}
-            correctAnswersCount={totalCorrect}
+            todayExamsPlayed={todayExamsPlayed}
+            todayCorrectAnswers={todayCorrectAnswers}
+            todayHighestScore={todayHighestScore}
             userEmail={session?.user?.email}
+            onPointsClaimed={handlePointsClaimed}
+            configuredMissions={dailyMissionsList}
+            allClearBonusXP={missionsSettings?.allClearBonusXP}
           />
 
         </div>

@@ -36,7 +36,7 @@ export default function SubjectGridSection({ subjectsList = [], isLoading = fals
   });
 
   return (
-    <div>
+    <div id="curriculum-section">
       {/* Header & Filter Tabs */}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-1.5">
@@ -157,7 +157,7 @@ export default function SubjectGridSection({ subjectsList = [], isLoading = fals
                 {/* Middle & Bottom: Subject Info */}
                 <div className="relative z-10 mt-auto pt-1 pl-0.5">
                   <span className="text-[7.5px] font-black text-amber-200 uppercase tracking-tight bg-black/30 backdrop-blur-xs px-1 py-0.2 rounded border border-white/15 inline-block mb-0.5">
-                    {completedCh}/{totalCh} অধ্যায়
+                    {totalCh > 0 ? `${completedCh}/${totalCh} অধ্যায়` : `${completedCh}টি অধ্যায়`}
                   </span>
 
                   <h4 className="text-[11.5px] font-black text-white leading-snug truncate group-hover:text-amber-200 transition-colors">

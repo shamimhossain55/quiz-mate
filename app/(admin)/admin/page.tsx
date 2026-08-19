@@ -37,6 +37,10 @@ import {
   Crown,
   UserCheck,
   ChevronDown,
+  Target,
+  Swords,
+  Award,
+  Gift,
 } from "lucide-react";
 
 import {
@@ -75,6 +79,20 @@ import {
   AdminQuestion,
 } from "@/lib/firestore/admin";
 import { BannerSlide } from "@/lib/firestore/banners";
+import {
+  DailyMissionConfig,
+  DailyMissionsGlobalSettings,
+  MissionTargetType,
+  DEFAULT_DAILY_MISSIONS,
+  DEFAULT_GLOBAL_SETTINGS,
+  getDailyMissionsConfig,
+  getDailyMissionsSettings,
+  saveDailyMissionsSettings,
+  addDailyMissionDoc,
+  updateDailyMissionDoc,
+  deleteDailyMissionDoc,
+  resetDefaultDailyMissions,
+} from "@/lib/firestore/missions";
 
 // ===== Types =====
 type NavItem = {
@@ -143,6 +161,35 @@ const PRESET_SECTION_TAGS = [
   "এমসিকিউ (MCQ)",
 ];
 
+// Preset Options for Daily Missions Management
+const PRESET_MISSION_METRICS: { label: string; value: MissionTargetType; defaultAction: string; hint: string }[] = [
+  { label: "🎯 কুইজ সংখ্যা (Quiz Count)", value: "quiz_count", defaultAction: "কুইজ খেলুন", hint: "আজকে নির্দিষ্ট সংখ্যক কুইজ সম্পন্ন করা" },
+  { label: "✨ সঠিক উত্তরের সংখ্যা (Correct Answers)", value: "correct_answers", defaultAction: "অনুশীলন করুন", hint: "আজকের কুইজে নির্দিষ্ট সংখ্যক প্রশ্নের সঠিক উত্তর দেওয়া" },
+  { label: "🏆 নূন্যতম স্কোর শতকরা হার (Min Score %)", value: "min_score_percent", defaultAction: "চ্যালেঞ্জ নিন", hint: "যেকোনো কুইজে নূন্যতম ৮০% বা ১০০% স্কোর অর্জন" },
+  { label: "⚔️ ব্যাটেল / ম্যাচ সংখ্যা (Battle Count)", value: "battle_count", defaultAction: "ব্যাটেল খেলুন", hint: "১v১ বা মাল্টিপ্লেয়ার ব্যাটেলে অংশগ্রহণ করা" },
+];
+
+const PRESET_MISSION_ICONS = [
+  { label: "🎯 টার্গেট (Target)", value: "Target" },
+  { label: "✨ স্পার্কল (Sparkles)", value: "Sparkles" },
+  { label: "🏆 ট্রফি (Trophy)", value: "Trophy" },
+  { label: "⚔️ ব্যাটেল সোর্ড (Swords)", value: "Swords" },
+  { label: "⚡ বাজ / এক্সপি (Zap)", value: "Zap" },
+  { label: "🔥 স্ট্রিক ফ্লেম (Flame)", value: "Flame" },
+  { label: "🎁 গিফট বক্স (Gift)", value: "Gift" },
+  { label: "🎖️ অ্যাওয়ার্ড (Award)", value: "Award" },
+  { label: "📖 বই ও পাঠ্য (BookOpen)", value: "BookOpen" },
+];
+
+const PRESET_MISSION_THEMES = [
+  { label: "Ocean Teal (সবুজ নীল)", color: "#0F766E", bg: "bg-teal-50 border-teal-200/80 text-teal-700" },
+  { label: "Amber Gold (স্বর্ণালী)", color: "#D97706", bg: "bg-amber-50 border-amber-200/80 text-amber-700" },
+  { label: "Indigo Purple (নীল বেগুনি)", color: "#6366F1", bg: "bg-indigo-50 border-indigo-200/80 text-indigo-700" },
+  { label: "Rose Pink (গোলাপী)", color: "#E11D48", bg: "bg-rose-50 border-rose-200/80 text-rose-700" },
+  { label: "Emerald Green (গাঢ় সবুজ)", color: "#059669", bg: "bg-emerald-50 border-emerald-200/80 text-emerald-700" },
+  { label: "Violet Royal (রয়েল ভায়োলেট)", color: "#7C3AED", bg: "bg-purple-50 border-purple-200/80 text-purple-700" },
+];
+
 export default function AdminPage() {
   const [activeNav, setActiveNav] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -168,6 +215,25 @@ export default function AdminPage() {
   const [quizzes, setQuizzes] = useState<AdminQuiz[]>([]);
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [banners, setBanners] = useState<BannerSlide[]>([]);
+
+  // Daily Missions Management State
+  const [missions, setMissions] = useState<DailyMissionConfig[]>([]);
+  const [missionSettings, setMissionSettings] = useState<DailyMissionsGlobalSettings>(DEFAULT_GLOBAL_SETTINGS);
+  const [isAddMissionOpen, setIsAddMissionOpen] = useState(false);
+  const [editingMission, setEditingMission] = useState<DailyMissionConfig | null>(null);
+  const [newMission, setNewMission] = useState<Omit<DailyMissionConfig, "id">>({
+    title: "",
+    desc: "",
+    targetType: "quiz_count",
+    target: 1,
+    rewardXP: 50,
+    icon: "Target",
+    color: "#0F766E",
+    bg: "bg-teal-50 border-teal-200/80 text-teal-700",
+    actionText: "কুইজ খেলুন",
+    active: true,
+    order: 1,
+  });
 
   // Modals & Toast State
   const [isAddQuizOpen, setIsAddQuizOpen] = useState(false);
@@ -253,7 +319,17 @@ export default function AdminPage() {
     async function loadData() {
       setLoading(true);
       try {
-        const [firestoreUsers, firestoreClasses, firestoreSubjects, firestoreQuizzes, firestoreQuestions, firestoreBanners, firestoreChapters] = await Promise.all([
+        const [
+          firestoreUsers,
+          firestoreClasses,
+          firestoreSubjects,
+          firestoreQuizzes,
+          firestoreQuestions,
+          firestoreBanners,
+          firestoreChapters,
+          firestoreMissions,
+          firestoreMissionSettings,
+        ] = await Promise.all([
           getAllStudents(),
           getAllClasses(),
           getAllSubjects(),
@@ -261,6 +337,8 @@ export default function AdminPage() {
           getAllQuestions(),
           getAllBanners(),
           getAllChapters(),
+          getDailyMissionsConfig().catch(() => DEFAULT_DAILY_MISSIONS),
+          getDailyMissionsSettings().catch(() => DEFAULT_GLOBAL_SETTINGS),
         ]);
 
         setUsers(firestoreUsers);
@@ -270,6 +348,8 @@ export default function AdminPage() {
         setQuestions(firestoreQuestions);
         setBanners(firestoreBanners);
         setAllChapters(firestoreChapters);
+        setMissions(firestoreMissions);
+        setMissionSettings(firestoreMissionSettings);
       } catch (err) {
         console.error("Error loading Firestore admin data:", err);
       } finally {
@@ -759,8 +839,111 @@ export default function AdminPage() {
     }
   };
 
+  // ===== DAILY MISSIONS HANDLERS =====
+  const handleOpenAddMission = () => {
+    setEditingMission(null);
+    setNewMission({
+      title: "",
+      desc: "",
+      targetType: "quiz_count",
+      target: 1,
+      rewardXP: 50,
+      icon: "Target",
+      color: "#0F766E",
+      bg: "bg-teal-50 border-teal-200/80 text-teal-700",
+      actionText: "কুইজ খেলুন",
+      active: true,
+      order: missions.length + 1,
+    });
+    setIsAddMissionOpen(true);
+  };
+
+  const handleOpenEditMission = (m: DailyMissionConfig) => {
+    setEditingMission(m);
+    setNewMission({
+      title: m.title,
+      desc: m.desc,
+      targetType: m.targetType,
+      target: m.target,
+      rewardXP: m.rewardXP,
+      icon: m.icon,
+      color: m.color,
+      bg: m.bg,
+      actionText: m.actionText,
+      active: m.active,
+      order: m.order,
+    });
+    setIsAddMissionOpen(true);
+  };
+
+  const handleSaveMission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMission.title.trim()) return;
+
+    try {
+      if (editingMission) {
+        await updateDailyMissionDoc(editingMission.id, newMission);
+        setMissions(
+          missions.map((m) => (m.id === editingMission.id ? { id: editingMission.id, ...newMission } : m))
+        );
+        showToast("মিশন সফলভাবে আপডেট হয়েছে! 🎯");
+      } else {
+        const id = await addDailyMissionDoc(newMission);
+        setMissions([...missions, { id, ...newMission }]);
+        showToast("নতুন দৈনিক মিশন তৈরি হয়েছে! 🚀");
+      }
+      setIsAddMissionOpen(false);
+      setEditingMission(null);
+    } catch (err: any) {
+      showToast("ত্রুটি: মিশন সংরক্ষণ করা যায়নি");
+    }
+  };
+
+  const handleDeleteMission = async (id: string) => {
+    if (!confirm("আপনি কি নিশ্চিত এই মিশনটি মুছে ফেলতে চান?")) return;
+    try {
+      await deleteDailyMissionDoc(id);
+      setMissions(missions.filter((m) => m.id !== id));
+      showToast("মিশন মুছে ফেলা হয়েছে! 🗑️");
+    } catch (err) {
+      showToast("মিশন ডিলিট করা যায়নি");
+    }
+  };
+
+  const handleToggleMissionActive = async (id: string, currentActive: boolean) => {
+    try {
+      await updateDailyMissionDoc(id, { active: !currentActive });
+      setMissions(missions.map((m) => (m.id === id ? { ...m, active: !currentActive } : m)));
+      showToast(`মিশন ${!currentActive ? "সক্রিয় (Active)" : "নিষ্ক্রিয় (Inactive)"} করা হয়েছে! ✅`);
+    } catch (err) {
+      showToast("স্ট্যাটাস পরিবর্তন করা যায়নি");
+    }
+  };
+
+  const handleSaveMissionSettings = async () => {
+    try {
+      await saveDailyMissionsSettings(missionSettings);
+      showToast("দৈনিক মিশন সেটিংস সংরক্ষণ করা হয়েছে! ⚙️");
+    } catch (err) {
+      showToast("সেটিংস সেভ করতে ত্রুটি হয়েছে");
+    }
+  };
+
+  const handleResetDefaultMissions = async () => {
+    if (!confirm("আপনি কি সব মিশন রিসেট করে ডিফল্ট সেটিংসে ফিরিয়ে আনতে চান?")) return;
+    try {
+      const defs = await resetDefaultDailyMissions();
+      setMissions(defs);
+      setMissionSettings(DEFAULT_GLOBAL_SETTINGS);
+      showToast("ডিফল্ট ৩টি মিশন এবং সেটিংস রিস্টোর করা হয়েছে! 🔄");
+    } catch (err) {
+      showToast("রিসেট করতে সমস্যা হয়েছে");
+    }
+  };
+
   const allNavItems: NavItem[] = [
     { id: "dashboard", label: "ড্যাশবোর্ড", icon: LayoutDashboard },
+    { id: "missions", label: "দৈনিক মিশন কন্ট্রোল", icon: Target, badge: String(missions.length), badgeColor: "bg-emerald-100 text-emerald-800" },
     { id: "banners", label: "ব্যানার ক্যারোজেল", icon: Layers, badge: String(banners.length), badgeColor: "bg-teal-100 text-teal-800" },
     { id: "quizzes", label: "কুইজ ম্যানেজমেন্ট", icon: ListChecks, badge: String(quizzes.length), badgeColor: "bg-amber-100 text-amber-800" },
     { id: "questions", label: "প্রশ্ন ব্যাংক (Questions)", icon: HelpCircle, badge: String(questions.length), badgeColor: "bg-teal-100 text-teal-800" },
@@ -777,6 +960,7 @@ export default function AdminPage() {
     if (currentUserRole === "content_creator") {
       return (
         item.id === "dashboard" ||
+        item.id === "missions" ||
         item.id === "quizzes" ||
         item.id === "questions" ||
         item.id === "subjects"
@@ -1049,6 +1233,214 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </>
+              )}
+
+              {/* DAILY MISSIONS CONTROL TAB */}
+              {activeNav === "missions" && (
+                <div className="space-y-4">
+                  {/* Top Title & Header Buttons */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+                        <Target width={18} height={18} className="text-emerald-400" />
+                        দৈনিক মিশন ও টার্গেট কন্ট্রোল ({missions.length}টি মিশন)
+                      </h2>
+                      <p className="text-[10px] text-slate-500">
+                        শিক্ষার্থীদের দৈনিক মিশন, টার্গেট মেট্রিক, XP রিওয়ার্ড এবং অল-ক্লিয়ার বোনাস নিয়ন্ত্রণ করুন
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={handleResetDefaultMissions}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all border border-slate-700 cursor-pointer"
+                        title="ডিফল্ট ৩টি মিশন রিস্টোর করুন"
+                      >
+                        <RefreshCw width={12} height={12} /> ডিফল্ট রিসেট
+                      </button>
+
+                      <button
+                        onClick={handleOpenAddMission}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition-all shadow-md shadow-emerald-600/30 cursor-pointer"
+                      >
+                        <Plus width={13} height={13} /> নতুন মিশন তৈরি
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary & Global Settings Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Stat Card 1: Active Missions */}
+                    <div className="rounded-2xl p-4 bg-slate-900 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-bold">মোট সক্রিয় মিশন</p>
+                        <p className="text-xl font-black text-white mt-0.5">
+                          {missions.filter((m) => m.active !== false).length} / {missions.length}
+                        </p>
+                      </div>
+                      <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <Target width={20} height={20} />
+                      </div>
+                    </div>
+
+                    {/* Stat Card 2: Total Daily XP */}
+                    <div className="rounded-2xl p-4 bg-slate-900 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-bold">সর্বমোট দৈনিক রিওয়ার্ড</p>
+                        <p className="text-xl font-black text-amber-400 mt-0.5">
+                          +{missions.filter((m) => m.active !== false).reduce((a, b) => a + (b.rewardXP || 0), 0) + (missionSettings.allClearBonusXP || 0)} XP
+                        </p>
+                      </div>
+                      <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                        <Zap width={20} height={20} />
+                      </div>
+                    </div>
+
+                    {/* Global Settings Box */}
+                    <div className="rounded-2xl p-3.5 bg-slate-900 border border-slate-800 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-extrabold text-white flex items-center gap-1.5">
+                          <Settings width={12} height={12} className="text-teal-400" />
+                          গ্লোবাল সেটিংস
+                        </span>
+                        <button
+                          onClick={handleSaveMissionSettings}
+                          className="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-[10px] font-bold transition-all shadow cursor-pointer"
+                        >
+                          সেভ করুন
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <label className="text-slate-400 text-[10.5px]">ফিচার সক্রিয়:</label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMissionSettings({
+                              ...missionSettings,
+                              enabled: !missionSettings.enabled,
+                            })
+                          }
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold transition-all cursor-pointer ${
+                            missionSettings.enabled
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                          }`}
+                        >
+                          {missionSettings.enabled ? "অন (ON)" : "অফ (OFF)"}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <label className="text-slate-400 text-[10.5px]">অল-ক্লিয়ার বোনাস XP:</label>
+                        <input
+                          type="number"
+                          value={missionSettings.allClearBonusXP}
+                          onChange={(e) =>
+                            setMissionSettings({
+                              ...missionSettings,
+                              allClearBonusXP: Number(e.target.value) || 0,
+                            })
+                          }
+                          className="w-20 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg text-amber-300 text-xs font-black text-right focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Missions List Grid */}
+                  {missions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl bg-slate-900 border border-slate-800 border-dashed">
+                      <Target width={28} height={28} className="text-slate-600" />
+                      <p className="text-sm font-bold text-slate-400">এখনো কোনো মিশন কনফিগার করা হয়নি</p>
+                      <button
+                        onClick={handleResetDefaultMissions}
+                        className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-500 transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw width={13} height={13} /> ডিফল্ট ৩টি মিশন লোড করুন
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {missions.map((m, idx) => {
+                        const metricInfo = PRESET_MISSION_METRICS.find((p) => p.value === m.targetType);
+                        return (
+                          <div
+                            key={m.id || idx}
+                            className={`rounded-2xl p-4 bg-slate-900 border transition-all flex flex-col justify-between space-y-3 ${
+                              m.active !== false
+                                ? "border-slate-800 hover:border-emerald-500/40"
+                                : "border-slate-800/60 opacity-60"
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              {/* Top Bar: Order, Metric Tag, Active Toggle, Actions */}
+                              <div className="flex items-center justify-between gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="h-6 w-6 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-500/30 text-[10px] font-black flex items-center justify-center">
+                                    #{idx + 1}
+                                  </span>
+                                  <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                                    {metricInfo?.label.split(" ")[0] || "টার্গেট"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleToggleMissionActive(m.id, m.active !== false)}
+                                    className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold cursor-pointer transition-all ${
+                                      m.active !== false
+                                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                        : "bg-slate-800 text-slate-400 border border-slate-700"
+                                    }`}
+                                    title="সক্রিয়/নিষ্ক্রিয় টগল"
+                                  >
+                                    {m.active !== false ? "সক্রিয়" : "নিষ্ক্রিয়"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditMission(m)}
+                                    className="h-6 w-6 rounded-md bg-slate-800 text-amber-300 hover:bg-amber-500 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer"
+                                    title="সম্পাদনা করুন"
+                                  >
+                                    <Edit3 width={11} height={11} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteMission(m.id)}
+                                    className="h-6 w-6 rounded-md bg-slate-800 text-rose-400 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                                    title="মুছে ফেলুন"
+                                  >
+                                    <Trash2 width={11} height={11} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Title & Desc */}
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-sm font-extrabold text-white">{m.title}</h3>
+                                  <span className="text-[10px] font-black text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                                    +{m.rewardXP} XP
+                                  </span>
+                                </div>
+                                <p className="text-[10.5px] text-slate-400 mt-1 line-clamp-2">{m.desc}</p>
+                              </div>
+                            </div>
+
+                            {/* Bottom Info Bar */}
+                            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="font-bold text-teal-400 flex items-center gap-1">
+                                লক্ষ্য: {m.target} {m.targetType === "min_score_percent" ? "%" : "টি"}
+                              </span>
+                              <span className="font-mono text-[9px] text-slate-500">
+                                বাটন: "{m.actionText || "কুইজ খেলুন"}"
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* BANNERS MANAGEMENT TAB */}
@@ -3142,6 +3534,206 @@ export default function AdminPage() {
                 রোল সেভ করুন
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: ADD / EDIT DAILY MISSION ===== */}
+      {isAddMissionOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-5 space-y-4 shadow-2xl my-6 relative">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Target width={18} height={18} className="text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-extrabold text-white">
+                    {editingMission ? "দৈনিক মিশন সম্পাদনা করুন" : "নতুন দৈনিক মিশন তৈরি"}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">মিশন টাইটেল, টার্গেট মেট্রিক ও রিওয়ার্ড নির্ধারণ করুন</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddMissionOpen(false);
+                  setEditingMission(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X width={18} height={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMission} className="space-y-3.5 text-xs">
+              {/* Mission Title */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">
+                  ১. মিশন টাইটেল (Title) <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: ১টি কুইজ খেলুন"
+                  value={newMission.title}
+                  onChange={(e) => setNewMission({ ...newMission, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Mission Description */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">২. মিশন বিবরণ (Description)</label>
+                <textarea
+                  rows={2}
+                  placeholder="যেমন: আজকে যেকোনো বিষয়ে অন্তত ১টি পূর্ণাঙ্গ কুইজ দিন"
+                  value={newMission.desc}
+                  onChange={(e) => setNewMission({ ...newMission, desc: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Target Metric Type */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">
+                  ৩. টার্গেট মেট্রিক টাইপ (Target Type) <span className="text-rose-400">*</span>
+                </label>
+                <select
+                  value={newMission.targetType}
+                  onChange={(e) => {
+                    const selectedVal = e.target.value as MissionTargetType;
+                    const preset = PRESET_MISSION_METRICS.find((p) => p.value === selectedVal);
+                    setNewMission({
+                      ...newMission,
+                      targetType: selectedVal,
+                      actionText: preset?.defaultAction || newMission.actionText,
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-emerald-400 font-bold focus:outline-none focus:border-emerald-500"
+                >
+                  {PRESET_MISSION_METRICS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  💡 {PRESET_MISSION_METRICS.find((p) => p.value === newMission.targetType)?.hint}
+                </p>
+              </div>
+
+              {/* Target Count & Reward XP */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">
+                    ৪. লক্ষ্যমাত্রা সংখ্যা (Target Goal) <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={newMission.target}
+                    onChange={(e) => setNewMission({ ...newMission, target: Number(e.target.value) || 1 })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-black focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">
+                    ৫. রিওয়ার্ড XP (Reward XP) <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={5}
+                    step={5}
+                    required
+                    value={newMission.rewardXP}
+                    onChange={(e) => setNewMission({ ...newMission, rewardXP: Number(e.target.value) || 50 })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-amber-300 font-black focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Action Button Text */}
+              <div>
+                <label className="block text-slate-400 font-bold mb-1">৬. অপূর্ণ অবস্থায় বাটন টেক্সট (Action CTA Text)</label>
+                <input
+                  type="text"
+                  placeholder="যেমন: কুইজ খেলুন / অনুশীলন করুন / চ্যালেঞ্জ নিন"
+                  value={newMission.actionText}
+                  onChange={(e) => setNewMission({ ...newMission, actionText: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Icon & Theme Presets */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">৭. আইকন (Icon)</label>
+                  <select
+                    value={newMission.icon}
+                    onChange={(e) => setNewMission({ ...newMission, icon: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    {PRESET_MISSION_ICONS.map((ic) => (
+                      <option key={ic.value} value={ic.value}>
+                        {ic.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-bold mb-1">৮. থিম কালার (Color Theme)</label>
+                  <select
+                    value={newMission.color}
+                    onChange={(e) => {
+                      const theme = PRESET_MISSION_THEMES.find((t) => t.color === e.target.value);
+                      if (theme) {
+                        setNewMission({ ...newMission, color: theme.color, bg: theme.bg });
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                  >
+                    {PRESET_MISSION_THEMES.map((th) => (
+                      <option key={th.color} value={th.color}>
+                        {th.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Status Active Toggle */}
+              <div className="flex items-center justify-between p-3 bg-slate-800/60 rounded-xl border border-slate-800">
+                <span className="text-slate-300 font-bold">মিশন স্ট্যাটাস সক্রিয় (Active)</span>
+                <input
+                  type="checkbox"
+                  checked={newMission.active !== false}
+                  onChange={(e) => setNewMission({ ...newMission, active: e.target.checked })}
+                  className="h-4 w-4 accent-emerald-500 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* Submit / Cancel Buttons */}
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddMissionOpen(false);
+                    setEditingMission(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700 transition-all cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check width={14} height={14} />
+                  {editingMission ? "হালনাগাদ সেভ করুন" : "মিশন তৈরি করুন"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

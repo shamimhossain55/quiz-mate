@@ -67,7 +67,9 @@ export default function ContinueLearningSection({ subjectsList = [] }: ContinueL
           </div>
 
           <span className="text-[9.5px] font-extrabold text-amber-200 bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/15">
-            {activeSubject.progress}% সম্পন্ন
+            {activeSubject.chaptersCount && activeSubject.chaptersCount > 0
+              ? `${activeSubject.completedChapters || 0}/${activeSubject.chaptersCount} অধ্যায় (${activeSubject.progress}%)`
+              : `${activeSubject.progress}% সম্পন্ন`}
           </span>
         </div>
 
