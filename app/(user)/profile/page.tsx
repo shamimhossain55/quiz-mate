@@ -298,28 +298,38 @@ export default function ProfilePage() {
         fetch("/api/achievements"),
         fetch("/api/friends"),
       ]);
-      const pData = await pRes.json();
-      if (pRes.ok && pData.student) {
-        setStudent(pData.student);
-        setNameInput(pData.student.name || session?.user?.name || "");
-        setBioInput(pData.student.bio || "");
-        setClassId(pData.student.classId || "class6");
-        setGroup(pData.student.group || "all");
-        const studentLang = (pData.student.language as Language) || "bn";
-        setLanguage(studentLang);
-        setGlobalLanguage(studentLang);
-        setDivision(pData.student.division || "");
-        setDistrict(pData.student.district || "");
+
+      if (pRes.ok) {
+        const pData = await pRes.json().catch(() => ({}));
+        if (pData?.student) {
+          setStudent(pData.student);
+          setNameInput(pData.student.name || session?.user?.name || "");
+          setBioInput(pData.student.bio || "");
+          setClassId(pData.student.classId || "class6");
+          setGroup(pData.student.group || "all");
+          const studentLang = (pData.student.language as Language) || "bn";
+          setLanguage(studentLang);
+          setGlobalLanguage(studentLang);
+          setDivision(pData.student.division || "");
+          setDistrict(pData.student.district || "");
+        }
       }
-      const aData = await aRes.json();
-      if (aRes.ok) setAchievements(aData.achievements || []);
-      const fData = await fRes.json();
+
+      if (aRes.ok) {
+        const aData = await aRes.json().catch(() => ({}));
+        setAchievements(aData?.achievements || []);
+      }
+
       if (fRes.ok) {
-        setFriends(fData.friends || []);
-        setIncomingRequests(fData.incomingRequests || []);
+        const fData = await fRes.json().catch(() => ({}));
+        setFriends(fData?.friends || []);
+        setIncomingRequests(fData?.incomingRequests || []);
       }
-    } catch (e) { console.error(e); }
-    finally { setIsLoading(false); }
+    } catch (e) {
+      console.error("Profile loadData error:", e);
+    } finally {
+      setIsLoading(false);
+    }
   };
   useEffect(() => { loadData(); }, []);
 
@@ -465,8 +475,8 @@ export default function ProfilePage() {
     setRespondingReqId(id);
     try {
       const r = await fetch("/api/friends/respond", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId: id, action }) });
-      const d = await r.json();
-      showToast(d.message || "সম্পন্ন!");
+      const d = await r.json().catch(() => ({}));
+      showToast(d?.message || "সম্পন্ন!");
       if (r.ok) loadData();
     } finally { setRespondingReqId(null); }
   };
@@ -474,8 +484,8 @@ export default function ProfilePage() {
     setRemovingEmail(email);
     try {
       const r = await fetch("/api/friends/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetEmail: email }) });
-      const d = await r.json();
-      showToast(d.message || "সরানো হয়েছে");
+      const d = await r.json().catch(() => ({}));
+      showToast(d?.message || "সরানো হয়েছে");
       if (r.ok) loadData();
     } finally { setRemovingEmail(null); }
   };
