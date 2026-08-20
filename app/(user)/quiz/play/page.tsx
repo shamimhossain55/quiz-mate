@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Loader2, ShieldAlert } from "lucide-react";
 
@@ -14,15 +14,20 @@ import { useQuiz } from "@/context/QuizContext";
 import { useQuizConfig } from "@/context/QuizConfigContext";
 import { useQuizTimer } from "@/context/QuizTimerContext";
 import { getQuestions } from "@/lib/firestore/questions";
+import { getQuizById } from "@/lib/firestore/quizzes";
 import { Question } from "@/types/firestore";
 import { saveResult } from "@/lib/quiz/saveResult";
 import { updateStudentStats } from "@/lib/firestore/student";
 import { shuffleArray } from "@/lib/utils";
 
-export default function QuizPlayPage() {
+function QuizPlayContent() {
   const { data: session } = useSession();
   const router = useRouter();
-  const { config } = useQuizConfig();
+  const searchParams = useSearchParams();
+  const urlQuizId = searchParams.get("quizId");
+  const isLiveMode = searchParams.get("mode") === "live";
+
+  const { config, setConfig } = useQuizConfig();
 
   const {
     currentQuestion,
@@ -38,25 +43,102 @@ export default function QuizPlayPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [activeQuizId, setActiveQuizId] = useState<string>(urlQuizId || "");
+  const [activeQuizTitle, setActiveQuizTitle] = useState<string>("");
 
   useEffect(() => {
-    async function loadQuestions() {
+    async function loadQuizData() {
+      setLoading(true);
+
+      // 1. Check if quizId is provided via URL (e.g. Live Exam or Direct Quiz Link)
+      if (urlQuizId) {
+        try {
+          const quizDoc = await getQuizById(urlQuizId);
+          if (quizDoc) {
+            setActiveQuizId(quizDoc.id);
+            setActiveQuizTitle(quizDoc.title || quizDoc.name || "লাইভ কুইজ");
+
+            let loadedQuestions: Question[] = [];
+
+            // If quiz has embedded JSON questions
+            if (quizDoc.questions && Array.isArray(quizDoc.questions) && quizDoc.questions.length > 0) {
+              loadedQuestions = quizDoc.questions.map((q, idx) => ({
+                id: q.id || `live_q_${idx + 1}`,
+                chapterId: quizDoc.chapterId || quizDoc.id,
+                quizId: quizDoc.id,
+                classId: quizDoc.classId,
+                subjectId: quizDoc.subjectId,
+                question: q.questionText || q.question || `প্রশ্ন ${idx + 1}`,
+                options: q.options || ["", "", "", ""],
+                correctAnswer: q.correctAnswer ?? 0,
+                explanation: q.explanation || "",
+                order: idx + 1,
+              }));
+            } else {
+              // Fallback to questions collection
+              loadedQuestions = await getQuestions(quizDoc.chapterId || quizDoc.id, quizDoc.subjectId);
+            }
+
+            if (loadedQuestions.length === 0) {
+              // No questions found
+              alert("এই কুইজে এখনো কোনো প্রশ্ন যুক্ত করা হয়নি।");
+              router.replace("/dashboard");
+              return;
+            }
+
+            // Calculate duration
+            let timeInSeconds = (quizDoc.duration || 10) * 60;
+            if (quizDoc.endTime) {
+              const diffSec = Math.floor((new Date(quizDoc.endTime).getTime() - Date.now()) / 1000);
+              if (diffSec > 0) {
+                timeInSeconds = Math.min(timeInSeconds, diffSec);
+              }
+            }
+
+            // Update config context
+            setConfig({
+              chapterId: quizDoc.chapterId || quizDoc.id,
+              subjectId: quizDoc.subjectId || "",
+              questionCount: loadedQuestions.length,
+              timeLimit: Math.max(1, Math.ceil(timeInSeconds / 60)),
+              negativeMarking: !!quizDoc.negativeMarking,
+            });
+
+            setQuestions(loadedQuestions);
+            setPlayedQuestions(loadedQuestions);
+            resetTimer(timeInSeconds);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error("Error loading quiz by id:", e);
+        }
+      }
+
+      // 2. Standard chapter-based quiz flow
       if (!config.chapterId) {
         router.replace("/dashboard");
         return;
       }
+
       const data = await getQuestions(config.chapterId, config.subjectId);
-      // Shuffle all questions randomly so user gets a randomized set/order on every quiz
       const shuffled = shuffleArray(data);
       const selected = config.questionCount ? shuffled.slice(0, config.questionCount) : shuffled;
+
+      if (selected.length === 0) {
+        alert("এই অধ্যায়ে এখনো কোনো প্রশ্ন পাওয়া যায়নি।");
+        router.replace("/dashboard");
+        return;
+      }
+
       setQuestions(selected);
-      // questions গুলো context-এ persist করো যাতে review page re-fetch না করে
       setPlayedQuestions(selected);
       resetTimer((config.timeLimit || 10) * 60);
       setLoading(false);
     }
-    loadQuestions();
-  }, [config.chapterId, config.subjectId, config.timeLimit, config.questionCount, router, resetTimer, setPlayedQuestions]);
+
+    loadQuizData();
+  }, [urlQuizId, config.chapterId, config.subjectId, config.timeLimit, config.questionCount, router, resetTimer, setPlayedQuestions, setConfig]);
 
   const totalQuestions = questions.length > 0
     ? questions.length
@@ -75,10 +157,12 @@ export default function QuizPlayPage() {
 
     if (session?.user?.email) {
       const percentage = totalQuestions === 0 ? 0 : Math.round((score / totalQuestions) * 100);
+      const finalQuizId = activeQuizId || `${config.chapterId}_quiz`;
+
       await saveResult({
         userId: session.user.email,
-        quizId: `${config.chapterId}_quiz`,
-        chapterId: config.chapterId,
+        quizId: finalQuizId,
+        chapterId: config.chapterId || activeQuizId,
         score,
         correct,
         wrong,
@@ -97,7 +181,7 @@ export default function QuizPlayPage() {
     router.push(
       `/quiz/result?score=${score}&correct=${correct}&wrong=${wrong}&total=${totalQuestions}`
     );
-  }, [answers, questions, totalQuestions, session, config, router]);
+  }, [answers, questions, totalQuestions, session, config, router, activeQuizId]);
 
   useEffect(() => {
     if (loading) return;
@@ -110,7 +194,7 @@ export default function QuizPlayPage() {
         }
         return prev - 1;
       });
-    }, 1000);
+    } , 1000);
 
     return () => clearInterval(timer);
   }, [loading, setTimeLeft]);
@@ -123,101 +207,161 @@ export default function QuizPlayPage() {
 
   const current = questions[currentQuestion - 1] || {
     id: `q_${currentQuestion}`,
-    question: `প্রশ্ন ${currentQuestion}: বাংলাদেশের জাতীয় ফলের নাম কি?`,
-    options: ["আম", "কাঠাল", "লিচু", "কলা"],
-    correctAnswer: 1,
+    question: `প্রশ্ন ${currentQuestion}`,
+    options: ["", "", "", ""],
+    correctAnswer: 0,
   };
 
-  function handleAnswerSelect(answerIndex: number) {
+  const handleSelectAnswer = (index: number) => {
     setAnswers((prev) => ({
       ...prev,
-      [current.id]: answerIndex,
+      [current.id]: index,
     }));
+  };
+
+  const handleNext = () => {
+    if (currentQuestion < totalQuestions) {
+      setCurrentQuestion((prev) => prev + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentQuestion > 1) {
+      setCurrentQuestion((prev) => prev - 1);
+    }
+  };
+
+  const handleExitClick = () => {
+    setShowExitModal(true);
+  };
+
+  const handleConfirmExit = () => {
+    resetQuiz();
+    setShowExitModal(false);
+    router.replace("/dashboard");
+  };
+
+  const handleCancelExit = () => {
+    setShowExitModal(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 text-teal-600 animate-spin mb-3" />
+        <p className="text-xs font-bold text-slate-600">কুইজের প্রশ্ন প্রস্তুত হচ্ছে...</p>
+        {activeQuizTitle && <p className="text-[11px] text-teal-600 font-semibold mt-1">{activeQuizTitle}</p>}
+      </div>
+    );
   }
 
-  const minutes = Math.floor(Math.max(0, timeLeft) / 60);
-  const seconds = Math.max(0, timeLeft) % 60;
-  const formattedTime = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-
   return (
-    <div className="h-screen font-sans flex flex-col relative overflow-hidden bg-slate-50 selection:bg-teal-500 selection:text-white">
-      {/* AMBIENT GLOW BACKGROUND */}
-      <div className="absolute -top-24 -left-20 w-80 h-80 rounded-full bg-teal-400/15 blur-3xl pointer-events-none animate-ambient-float" />
-      <div className="absolute top-1/3 -right-24 w-80 h-80 rounded-full bg-indigo-400/10 blur-3xl pointer-events-none animate-ambient-float" style={{ animationDelay: "-4s" }} />
-      <div className="absolute -bottom-20 left-10 w-72 h-72 rounded-full bg-rose-400/10 blur-3xl pointer-events-none animate-ambient-float" style={{ animationDelay: "-2s" }} />
+    <div className="h-screen font-sans flex flex-col bg-slate-50 select-none overflow-hidden">
+      {/* 1. Header */}
+      <QuizHeader
+        subject={activeQuizTitle || config.subjectId || "কুইজ"}
+        currentQuestion={currentQuestion}
+        totalQuestions={totalQuestions}
+        timeLeft={`${Math.floor(timeLeft / 60)
+          .toString()
+          .padStart(2, "0")}:${(timeLeft % 60).toString().padStart(2, "0")}`}
+        onExit={handleExitClick}
+      />
 
-      <div className="mx-auto w-full max-w-sm flex flex-col flex-1 min-h-0 relative z-10">
-
-        {/* TOP HEADER */}
-        <QuizHeader
-          subject={config.chapterId ? `অধ্যায়: ${config.chapterId}` : "অনুশীলনী কুইজ"}
-          currentQuestion={currentQuestion}
-          totalQuestions={totalQuestions}
-          timeLeft={formattedTime}
-          onExit={() => setShowExitModal(true)}
-        />
-
-        {/* PROGRESS BAR */}
-        <QuizProgress currentQuestion={currentQuestion} totalQuestions={totalQuestions} />
-
-        {/* MAIN QUESTION & CONTROLS */}
-        {loading ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-teal-600">
-            <Loader2 width={28} height={28} className="animate-spin" />
-            <p className="text-xs font-bold text-slate-600">প্রশ্ন লোড হচ্ছে...</p>
-          </div>
-        ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-6 space-y-4 no-scrollbar flex flex-col justify-between">
-            <QuestionCard
-              question={current}
-              selectedAnswer={answers[current.id]}
-              onAnswerSelect={handleAnswerSelect}
-            />
-
-            <QuizNavigation
-              currentQuestion={currentQuestion}
-              totalQuestions={totalQuestions}
-              onPrevious={() => setCurrentQuestion((prev) => Math.max(prev - 1, 1))}
-              onNext={() => setCurrentQuestion((prev) => Math.min(prev + 1, totalQuestions))}
-              onFinish={handleFinish}
-            />
+      {/* 2. Scrollable Body: Progress + Question */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col justify-start">
+        {isLiveMode && (
+          <div className="mb-2 flex items-center justify-between bg-rose-50 border border-rose-200/80 px-3 py-1.5 rounded-xl">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-rose-600 animate-pulse" />
+              <span className="text-[11px] font-black text-rose-700">🔴 লাইভ এক্সাম চলছে</span>
+            </div>
+            {activeQuizTitle && (
+              <span className="text-[10.5px] font-extrabold text-slate-700 truncate max-w-[180px]">
+                {activeQuizTitle}
+              </span>
+            )}
           </div>
         )}
+
+        <QuizProgress
+          currentQuestion={currentQuestion}
+          totalQuestions={totalQuestions}
+          answers={answers}
+          questions={questions}
+          onSelectQuestion={(idx) => setCurrentQuestion(idx + 1)}
+        />
+
+        <div className="mt-3">
+          <QuestionCard
+            question={current}
+            selectedAnswer={answers[current.id]}
+            onSelectAnswer={handleSelectAnswer}
+            questionIndex={currentQuestion}
+          />
+        </div>
       </div>
 
-      {/* EXIT CONFIRMATION MODAL */}
+      {/* 3. Footer Navigation */}
+      <div className="p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 pb-6">
+        <QuizNavigation
+          currentQuestion={currentQuestion}
+          totalQuestions={totalQuestions}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          onFinish={handleFinish}
+          hasSelectedAnswer={answers[current.id] !== undefined}
+        />
+      </div>
+
+      {/* Exit Confirmation Modal */}
       {showExitModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-5 w-full max-w-xs space-y-4 shadow-2xl text-center border border-slate-200">
-            <div className="h-12 w-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
-              <ShieldAlert width={24} height={24} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500 border border-rose-100">
+              <ShieldAlert className="w-6 h-6" />
             </div>
-            <div>
-              <h3 className="text-base font-black text-slate-900">কুইজ থেকে বের হতে চাও?</h3>
-              <p className="text-[11px] text-slate-500 font-medium mt-1">
-                এখন বের হলে তোমার অর্জিত অগ্রগতি মুছে যাবে!
+
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-slate-800">
+                কুইজ ছেড়ে যেতে চান?
+              </h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                এখন বের হয়ে গেলে বর্তমান অগ্রগতি মুছে যাবে এবং এই কুইজের কোনো পয়েন্ট যোগ হবে না।
               </p>
             </div>
-            <div className="flex items-center gap-2 pt-1">
+
+            <div className="flex gap-2.5 pt-2">
               <button
-                onClick={() => setShowExitModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-extrabold text-xs hover:bg-slate-200"
+                onClick={handleCancelExit}
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-xs font-black text-slate-600 hover:bg-slate-50 transition-colors"
               >
-                পড়া চালিয়ে যাও
+                থাকুন
               </button>
               <button
-                onClick={() => {
-                  resetQuiz();
-                  router.push("/dashboard");
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white font-extrabold text-xs shadow-md hover:bg-rose-500"
+                onClick={handleConfirmExit}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-black shadow-lg shadow-rose-500/25 transition-colors"
               >
-                হ্যাঁ, বের হও
+                বের হন
               </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function QuizPlayPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen flex items-center justify-center bg-slate-50">
+          <Loader2 className="w-8 h-8 text-teal-600 animate-spin" />
+        </div>
+      }
+    >
+      <QuizPlayContent />
+    </Suspense>
   );
 }

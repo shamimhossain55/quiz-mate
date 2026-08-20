@@ -5,26 +5,30 @@ import { ArrowLeft, ArrowRight, Flag, Sparkles } from "lucide-react";
 interface QuizNavigationProps {
   currentQuestion: number;
   totalQuestions: number;
-  onPrevious: () => void;
+  onPrevious?: () => void;
+  onPrev?: () => void;
   onNext: () => void;
   onFinish: () => void;
+  hasSelectedAnswer?: boolean;
 }
 
 export default function QuizNavigation({
   currentQuestion,
   totalQuestions,
   onPrevious,
+  onPrev,
   onNext,
   onFinish,
 }: QuizNavigationProps) {
   const isFirstQuestion = currentQuestion === 1;
   const isLastQuestion = currentQuestion === totalQuestions;
+  const handlePrevious = onPrev || onPrevious || (() => {});
 
   return (
     <div className="flex items-center justify-between gap-3 pt-2">
       {/* Previous Button */}
       <button
-        onClick={onPrevious}
+        onClick={handlePrevious}
         disabled={isFirstQuestion}
         className={`flex items-center gap-1.5 px-4 py-3 rounded-2xl font-extrabold text-xs transition-all duration-200 border shadow-2xs ${
           isFirstQuestion

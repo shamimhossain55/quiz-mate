@@ -41,6 +41,16 @@ import {
   Swords,
   Award,
   Gift,
+  Clock,
+  Play,
+  Radio,
+  Eye,
+  FileJson,
+  CheckCircle2,
+  AlertTriangle,
+  Timer,
+  Calendar,
+  Copy,
 } from "lucide-react";
 
 import {
@@ -55,6 +65,8 @@ import {
   deleteSubject,
   getAllQuizzes,
   addQuiz,
+  updateQuizDoc,
+  toggleQuizLiveStatus,
   deleteQuizDoc,
   getAllClasses,
   getChaptersBySubject,
@@ -93,6 +105,18 @@ import {
   deleteDailyMissionDoc,
   resetDefaultDailyMissions,
 } from "@/lib/firestore/missions";
+import {
+  logAdminActivity,
+  getAdminActivityLogs,
+  AdminActivityLog,
+  ACTION_LABELS,
+  ENTITY_LABELS,
+  ACTION_COLORS,
+  ENTITY_COLORS,
+  ENTITY_ICONS,
+  formatRelativeTime,
+  formatFullDateTime,
+} from "@/lib/firestore/activity-logs";
 
 // ===== Types =====
 type NavItem = {
@@ -201,6 +225,19 @@ export default function AdminPage() {
   const [currentUserRole, setCurrentUserRole] = useState<
     "super_admin" | "admin" | "moderator" | "content_creator"
   >("super_admin");
+  const [currentAdminInfo, setCurrentAdminInfo] = useState<{
+    uid: string;
+    email: string;
+    name: string;
+  }>({ uid: "", email: "", name: "অ্যাডমিন" });
+
+  // Activity Logs State
+  const [activityLogs, setActivityLogs] = useState<AdminActivityLog[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityAdminFilter, setActivityAdminFilter] = useState<string>("all");
+  const [activityEntityFilter, setActivityEntityFilter] = useState<string>("all");
+  const [activityActionFilter, setActivityActionFilter] = useState<string>("all");
+  const [activitySearchQuery, setActivitySearchQuery] = useState<string>("");
   const [roleModalUser, setRoleModalUser] = useState<AdminUser | null>(null);
   const [selectedRole, setSelectedRole] = useState<
     "super_admin" | "admin" | "moderator" | "content_creator" | "user"
@@ -237,6 +274,10 @@ export default function AdminPage() {
 
   // Modals & Toast State
   const [isAddQuizOpen, setIsAddQuizOpen] = useState(false);
+  const [editingQuiz, setEditingQuiz] = useState<AdminQuiz | null>(null);
+  const [viewingQuizQuestions, setViewingQuizQuestions] = useState<AdminQuiz | null>(null);
+  const [quizClassFilter, setQuizClassFilter] = useState<string>("all");
+  const [quizStatusFilter, setQuizStatusFilter] = useState<string>("all");
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isAddBannerOpen, setIsAddBannerOpen] = useState(false);
@@ -261,6 +302,40 @@ export default function AdminPage() {
   const [selectedClassId, setSelectedClassId] = useState("class6");
   const [selectedSubjectId, setSelectedSubjectId] = useState("bangla");
   const [selectedChapterId, setSelectedChapterId] = useState("");
+
+  const [quizForm, setQuizForm] = useState<{
+    title: string;
+    classId: string;
+    subjectId: string;
+    chapterId: string;
+    duration: number;
+    status: "live" | "scheduled" | "published" | "draft" | "completed";
+    negativeMarking: boolean;
+    startTime: string;
+    endTime: string;
+    jsonInput: string;
+    jsonError: string | null;
+    parsedQuestions: Array<{
+      id?: string;
+      questionText: string;
+      options: string[];
+      correctAnswer: number;
+      explanation?: string;
+    }>;
+  }>({
+    title: "",
+    classId: "class6",
+    subjectId: "",
+    chapterId: "",
+    duration: 15,
+    status: "published",
+    negativeMarking: false,
+    startTime: "",
+    endTime: "",
+    jsonInput: "",
+    jsonError: null,
+    parsedQuestions: [],
+  });
 
   const [newQuiz, setNewQuiz] = useState({ name: "", questionsCount: 10, status: "published" as const });
   const [newSubject, setNewSubject] = useState({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "", sectionsText: "" });
@@ -300,6 +375,45 @@ export default function AdminPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const fetchActivityLogs = async () => {
+    setActivityLoading(true);
+    try {
+      const logs = await getAdminActivityLogs(150);
+      setActivityLogs(logs);
+    } catch (e) {
+      console.error("Failed to load activity logs", e);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const logAction = (
+    action: Parameters<typeof logAdminActivity>[0]["action"],
+    entityType: Parameters<typeof logAdminActivity>[0]["entityType"],
+    entityName: string,
+    details?: string
+  ) => {
+    const newLogItem = {
+      adminId: currentAdminInfo.uid || "unknown",
+      adminName: currentAdminInfo.name || "অ্যাডমিন",
+      adminEmail: currentAdminInfo.email || "",
+      adminRole: currentUserRole,
+      action,
+      entityType,
+      entityName,
+      details,
+    };
+    logAdminActivity(newLogItem);
+    setActivityLogs((prev) => [
+      {
+        id: "temp_" + Date.now(),
+        ...newLogItem,
+        timestamp: new Date(),
+      },
+      ...prev,
+    ]);
+  };
+
   // Load Real Data & Admin Session from Firestore on Mount
   useEffect(() => {
     async function loadSession() {
@@ -309,6 +423,13 @@ export default function AdminPage() {
           const data = await res.json();
           if (data.user?.role) {
             setCurrentUserRole(data.user.role);
+          }
+          if (data.user?.uid) {
+            setCurrentAdminInfo({
+              uid: data.user.uid,
+              email: data.user.email || "",
+              name: data.user.email?.split("@")[0] || "অ্যাডমিন",
+            });
           }
         }
       } catch (e) {
@@ -329,6 +450,7 @@ export default function AdminPage() {
           firestoreChapters,
           firestoreMissions,
           firestoreMissionSettings,
+          firestoreLogs,
         ] = await Promise.all([
           getAllStudents(),
           getAllClasses(),
@@ -339,6 +461,7 @@ export default function AdminPage() {
           getAllChapters(),
           getDailyMissionsConfig().catch(() => DEFAULT_DAILY_MISSIONS),
           getDailyMissionsSettings().catch(() => DEFAULT_GLOBAL_SETTINGS),
+          getAdminActivityLogs(150).catch(() => []),
         ]);
 
         setUsers(firestoreUsers);
@@ -350,6 +473,7 @@ export default function AdminPage() {
         setAllChapters(firestoreChapters);
         setMissions(firestoreMissions);
         setMissionSettings(firestoreMissionSettings);
+        setActivityLogs(firestoreLogs);
       } catch (err) {
         console.error("Error loading Firestore admin data:", err);
       } finally {
@@ -361,6 +485,13 @@ export default function AdminPage() {
     loadData();
   }, []);
 
+  // Fetch fresh activity logs whenever tab changes to activity
+  useEffect(() => {
+    if (activeNav === "activity") {
+      fetchActivityLogs();
+    }
+  }, [activeNav]);
+
   const handleUpdateRole = async (
     userId: string,
     newRole: "super_admin" | "admin" | "moderator" | "content_creator" | "user"
@@ -369,6 +500,7 @@ export default function AdminPage() {
       const targetUser = users.find((u) => u.id === userId);
       await updateStudentRole(userId, newRole, targetUser?.email);
       setUsers(users.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
+      logAction("role_change", "user", targetUser?.name || userId, `নতুন রোল: ${newRole}`);
       showToast(`ইউজার রোল পরিবর্তন করা হয়েছে: ${newRole.toUpperCase()} 🛡️`);
       setRoleModalUser(null);
     } catch (err: any) {
@@ -441,39 +573,275 @@ export default function AdminPage() {
     }
   };
 
-  const handleAddQuiz = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newQuiz.name) return;
+  const handleOpenAddQuiz = () => {
+    setEditingQuiz(null);
+    const defaultSub = subjects[0]?.id || "";
+    const defaultCh = allChapters.find((c) => c.subjectId === defaultSub)?.id || "";
+    let initialParsed: any[] = [];
     try {
-      const selectedSubObj = subjects.find(s => s.id === selectedSubjectId || s.slug === selectedSubjectId);
-      const subjectName = selectedSubObj ? selectedSubObj.name : "সাধারণ";
-      const payload = {
-        name: newQuiz.name,
-        subject: subjectName,
-        classId: selectedClassId,
-        subjectId: selectedSubjectId,
-        chapterId: selectedChapterId,
-        questionsCount: Number(newQuiz.questionsCount),
-        status: newQuiz.status,
+      initialParsed = JSON.parse(sampleJsonTemplate);
+    } catch (e) {}
+
+    setQuizForm({
+      title: "",
+      classId: "class6",
+      subjectId: defaultSub,
+      chapterId: defaultCh,
+      duration: 15,
+      status: "published",
+      negativeMarking: false,
+      startTime: "",
+      endTime: "",
+      jsonInput: sampleJsonTemplate,
+      jsonError: null,
+      parsedQuestions: initialParsed,
+    });
+    setIsAddQuizOpen(true);
+  };
+
+  const handleOpenEditQuiz = (quiz: AdminQuiz) => {
+    setEditingQuiz(quiz);
+    const questionsList = quiz.questions || [];
+    const jsonStr = questionsList.length > 0 ? JSON.stringify(questionsList, null, 2) : "";
+    setQuizForm({
+      title: quiz.title || quiz.name || "",
+      classId: quiz.classId || "all",
+      subjectId: quiz.subjectId || (subjects[0]?.id || ""),
+      chapterId: quiz.chapterId || "",
+      duration: quiz.duration || 15,
+      status: quiz.status || "published",
+      negativeMarking: !!quiz.negativeMarking,
+      startTime: quiz.startTime || "",
+      endTime: quiz.endTime || "",
+      jsonInput: jsonStr,
+      jsonError: null,
+      parsedQuestions: questionsList.map((q, idx) => ({
+        id: q.id || `q_${idx + 1}`,
+        questionText: q.questionText || q.question || `প্রশ্ন ${idx + 1}`,
+        options: q.options || ["", "", "", ""],
+        correctAnswer: q.correctAnswer ?? 0,
+        explanation: q.explanation || "",
+      })),
+    });
+    setIsAddQuizOpen(true);
+  };
+
+  const handleJsonChange = (text: string) => {
+    let err: string | null = null;
+    let parsed: any[] = [];
+    if (text.trim()) {
+      try {
+        const data = JSON.parse(text);
+        if (!Array.isArray(data)) {
+          err = "JSON ডেটা অবশ্যই একটি Array ([ ... ]) হতে হবে।";
+        } else {
+          parsed = data.map((item, idx) => ({
+            id: item.id || `q_${idx + 1}`,
+            questionText: item.questionText || item.question || `প্রশ্ন ${idx + 1}`,
+            options: Array.isArray(item.options) ? item.options : ["", "", "", ""],
+            correctAnswer: typeof item.correctAnswer === "number" ? item.correctAnswer : 0,
+            explanation: item.explanation || "",
+          }));
+          if (parsed.some((p) => !p.questionText || p.options.length < 2)) {
+            err = "প্রত্যেক প্রশ্নে questionText এবং কমপক্ষে ২টি options থাকতে হবে।";
+          }
+        }
+      } catch (e: any) {
+        err = "JSON সিনট্যাক্স সঠিক নয়: " + (e.message || "");
+      }
+    }
+    setQuizForm((prev) => ({
+      ...prev,
+      jsonInput: text,
+      jsonError: err,
+      parsedQuestions: parsed,
+    }));
+  };
+
+  const handleLoadSampleJson = () => {
+    handleJsonChange(sampleJsonTemplate);
+    showToast("নমুনা JSON লোড হয়েছে! 📝");
+  };
+
+  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      handleJsonChange(content);
+      showToast("JSON ফাইল সফলভাবে আপলোড হয়েছে! 📂");
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSaveQuiz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quizForm.title.trim()) {
+      showToast("কুইজ টাইটেল লিখুন");
+      return;
+    }
+    if (quizForm.jsonError) {
+      showToast("JSON এর ভুলগুলো সংশোধন করুন");
+      return;
+    }
+
+    try {
+      const selectedSub = subjects.find((s) => s.id === quizForm.subjectId || s.slug === quizForm.subjectId);
+      const selectedCh = allChapters.find((c) => c.id === quizForm.chapterId);
+      const subName = selectedSub ? selectedSub.name : "সাধারণ";
+      const chName = selectedCh ? selectedCh.name : "";
+
+      const questionsToSave =
+        quizForm.parsedQuestions.length > 0
+          ? quizForm.parsedQuestions
+          : editingQuiz?.questions || [];
+      const questionsCount = questionsToSave.length;
+
+      let startTime = quizForm.startTime || null;
+      let endTime = quizForm.endTime || null;
+      if (quizForm.status === "live") {
+        startTime = new Date().toISOString();
+        endTime = new Date(Date.now() + Number(quizForm.duration) * 60 * 1000).toISOString();
+      }
+
+      const payload: Partial<AdminQuiz> = {
+        title: quizForm.title.trim(),
+        name: quizForm.title.trim(),
+        classId: quizForm.classId,
+        subjectId: quizForm.subjectId,
+        subject: subName,
+        subjectName: subName,
+        chapterId: quizForm.chapterId,
+        chapterName: chName,
+        duration: Number(quizForm.duration) || 15,
+        questionsCount,
+        totalQuestions: questionsCount,
+        negativeMarking: quizForm.negativeMarking,
+        status: quizForm.status,
+        isLive: quizForm.status === "live",
+        startTime,
+        endTime,
+        questions: questionsToSave,
       };
-      const newId = await addQuiz(payload);
-      const item: AdminQuiz = { id: newId, ...payload, attempts: 0, avgScore: "0%" };
-      setQuizzes([item, ...quizzes]);
+
+      if (editingQuiz) {
+        await updateQuizDoc(editingQuiz.id, payload);
+        setQuizzes(
+          quizzes.map((q) =>
+            q.id === editingQuiz.id ? { ...q, ...payload, id: editingQuiz.id } : q
+          )
+        );
+        logAction("update", "quiz", payload.title || "কুইজ", `${questionsCount}টি প্রশ্ন, সময়: ${payload.duration} মিনিট`);
+        showToast("কুইজ সফলভাবে আপডেট করা হয়েছে! ✨");
+      } else {
+        const newId = await addQuiz(payload as any);
+        setQuizzes([
+          { id: newId, ...payload, attempts: 0, avgScore: "০%" } as AdminQuiz,
+          ...quizzes,
+        ]);
+        logAction("create", "quiz", payload.title || "কুইজ", `${questionsCount}টি প্রশ্ন, বিষয়: ${subName}`);
+        showToast("নতুন কুইজ ও প্রশ্ন সফলভাবে তৈরি হয়েছে! 🔥");
+      }
+
       setIsAddQuizOpen(false);
-      setNewQuiz({ name: "", questionsCount: 10, status: "published" });
-      showToast("Class, Subject ও Chapter সহ নতুন কুইজ তৈরি হয়েছে! 🔥");
-    } catch (err) {
-      showToast("ত্রুটি: কুইজ তৈরি করা যায়নি");
+      setEditingQuiz(null);
+    } catch (err: any) {
+      showToast("ত্রুটি: " + (err.message || "কুইজ সেভ করা যায়নি"));
     }
   };
 
+  const handleToggleLiveStatus = async (quiz: AdminQuiz) => {
+    const isCurrentlyLive = quiz.status === "live" || quiz.isLive;
+    try {
+      if (isCurrentlyLive) {
+        await toggleQuizLiveStatus(quiz.id, false);
+        setQuizzes(
+          quizzes.map((q) =>
+            q.id === quiz.id ? { ...q, status: "completed", isLive: false } : q
+          )
+        );
+        logAction("toggle_live", "quiz", quiz.title || quiz.name || "কুইজ", "লাইভ সমাপ্ত করা হয়েছে");
+        showToast(`🔴 "${quiz.title || quiz.name}" লাইভ এক্সাম সমাপ্ত করা হয়েছে!`);
+      } else {
+        const duration = quiz.duration || 15;
+        await toggleQuizLiveStatus(quiz.id, true, duration);
+        const now = new Date();
+        const endTime = new Date(now.getTime() + duration * 60 * 1000).toISOString();
+        setQuizzes(
+          quizzes.map((q) =>
+            q.id === quiz.id
+              ? { ...q, status: "live", isLive: true, startTime: now.toISOString(), endTime }
+              : q
+          )
+        );
+        logAction("toggle_live", "quiz", quiz.title || quiz.name || "কুইজ", `লাইভ শুরু (${duration} মিনিট)`);
+        showToast(`🚀 "${quiz.title || quiz.name}" লাইভ শুরু হয়েছে! (${duration} মিনিট)`);
+      }
+    } catch (err: any) {
+      showToast("লাইভ স্ট্যাটাস পরিবর্তন করা যায়নি: " + (err.message || ""));
+    }
+  };
+
+  const handleOpenViewQuestions = (quiz: AdminQuiz) => {
+    setViewingQuizQuestions(quiz);
+  };
+
+  const handleAddQuiz = handleSaveQuiz;
+
+  const handleOpenBulkUpload = () => {
+    const targetClass =
+      questionClassFilter && questionClassFilter !== "all"
+        ? questionClassFilter
+        : classes[0]?.id || "class6";
+    const availableSubs = subjects.filter((s) => s.classId === targetClass);
+    const targetSubject =
+      questionSubjectFilter &&
+      questionSubjectFilter !== "all" &&
+      availableSubs.some((s) => s.id === questionSubjectFilter)
+        ? questionSubjectFilter
+        : availableSubs[0]?.id || "";
+    const availableChapters = allChapters.filter((c) => c.subjectId === targetSubject);
+    const targetChapter =
+      questionChapterFilter &&
+      questionChapterFilter !== "all" &&
+      availableChapters.some((c) => c.id === questionChapterFilter)
+        ? questionChapterFilter
+        : "";
+
+    setBulkMeta({
+      classId: targetClass,
+      subjectId: targetSubject,
+      chapterId: targetChapter,
+      quizId: "",
+    });
+    setIsBulkUploadOpen(true);
+  };
+
   const handleOpenAddQuestion = () => {
-    const defaultSub = subjects[0]?.id || "";
-    const defaultCh = allChapters.find((c) => c.subjectId === defaultSub)?.id || "";
+    const targetClass =
+      questionClassFilter && questionClassFilter !== "all"
+        ? questionClassFilter
+        : classes[0]?.id || "class6";
+    const availableSubs = subjects.filter((s) => s.classId === targetClass);
+    const targetSubject =
+      questionSubjectFilter &&
+      questionSubjectFilter !== "all" &&
+      availableSubs.some((s) => s.id === questionSubjectFilter)
+        ? questionSubjectFilter
+        : availableSubs[0]?.id || "";
+    const availableChapters = allChapters.filter((c) => c.subjectId === targetSubject);
+    const targetChapter =
+      questionChapterFilter &&
+      questionChapterFilter !== "all" &&
+      availableChapters.some((c) => c.id === questionChapterFilter)
+        ? questionChapterFilter
+        : "";
+
     setNewQuestion({
-      classId: subjects[0]?.classId || "class6",
-      subjectId: defaultSub,
-      chapterId: defaultCh,
+      classId: targetClass,
+      subjectId: targetSubject,
+      chapterId: targetChapter,
       questionText: "",
       options: ["", "", "", ""],
       correctAnswer: 0,
@@ -501,6 +869,7 @@ export default function AdminPage() {
       const id = await addQuestion(payload);
       setQuestions([{ id, ...payload }, ...questions]);
       setIsAddQuestionOpen(false);
+      logAction("create", "question", newQuestion.questionText.trim().substring(0, 50));
       showToast("নতুন প্রশ্ন সফলভাবে যোগ হয়েছে! 📝");
     } catch (err) {
       console.error("Error creating question:", err);
@@ -515,6 +884,7 @@ export default function AdminPage() {
       if (!Array.isArray(parsed)) throw new Error("JSON must be an array");
 
       const count = await addBulkQuestions(parsed, bulkMeta);
+      logAction("bulk_upload", "question", `${count}টি প্রশ্ন আপলোড`, `বিষয়: ${bulkMeta.subjectId || "Default"}`);
       showToast(`${count}টি প্রশ্ন সফলভাবে Firebase-এ Bulk Upload হয়েছে! 🎉`);
       setIsBulkUploadOpen(false);
 
@@ -541,6 +911,7 @@ export default function AdminPage() {
       };
       await updateQuestion(editingQuestion.id, payload);
       setQuestions(questions.map((q) => (q.id === editingQuestion.id ? { ...editingQuestion, ...payload } : q)));
+      logAction("update", "question", editingQuestion.questionText.trim().substring(0, 50));
       setEditingQuestion(null);
       showToast("প্রশ্ন সফলভাবে এডিট হয়েছে! ✏️");
     } catch (err) {
@@ -550,8 +921,10 @@ export default function AdminPage() {
 
   const handleDeleteQuestion = async (id: string) => {
     try {
+      const q = questions.find((x) => x.id === id);
       await deleteQuestion(id);
       setQuestions(questions.filter((q) => q.id !== id));
+      logAction("delete", "question", q?.questionText?.substring(0, 50) || id);
       showToast("প্রশ্ন মুছে ফেলা হয়েছে! 🗑️");
     } catch (err) {
       showToast("প্রশ্ন ডিলিট করা যায়নি");
@@ -598,6 +971,7 @@ export default function AdminPage() {
         saveLocalSubjectImage(item.slug, item.imageUrl);
       }
       setSubjects([...subjects, item]);
+      logAction("create", "subject", item.name, `ক্লাস: ${item.classId}`);
       setIsAddSubjectOpen(false);
       setNewSubject({ name: "", slug: "", classId: "class6", group: "all", color: "#0D9488", imageUrl: "", sectionsText: "" });
       showToast("Firebase-এ নতুন বিষয় যুক্ত হয়েছে! 📚");
@@ -629,6 +1003,7 @@ export default function AdminPage() {
         saveLocalSubjectImage(editingSubject.slug, editingSubject.imageUrl);
       }
       setSubjects(subjects.map((s) => (s.id === editingSubject.id ? updatedSubjectObj : s)));
+      logAction("update", "subject", editingSubject.name, `ক্লাস: ${editingSubject.classId}`);
       setEditingSubject(null);
       showToast("বিষয় সফলভাবে আপডেট ও নতুন ক্লাসে সেট হয়েছে! ✏️");
     } catch (err) {
@@ -638,8 +1013,10 @@ export default function AdminPage() {
 
   const handleDeleteSubject = async (id: string) => {
     try {
+      const s = subjects.find((x) => x.id === id);
       await deleteSubject(id);
       setSubjects(subjects.filter((s) => s.id !== id));
+      logAction("delete", "subject", s?.name || id);
       showToast("বিষয় মুছে ফেলা হয়েছে! 🗑️");
     } catch (err) {
       showToast("ত্রুটি: বিষয় ডিলিট করা যায়নি");
@@ -660,6 +1037,7 @@ export default function AdminPage() {
       };
       const newId = await addStudent(userPayload);
       setUsers([{ id: newId, ...userPayload }, ...users]);
+      logAction("create", "user", userPayload.name, `ইমেইল: ${userPayload.email}, শ্রেণি: ${userPayload.class}`);
       setIsAddUserOpen(false);
       setNewUser({ name: "", email: "", class: "ক্লাস ৯" });
       showToast("Firebase-এ নতুন ইউজার তৈরি হয়েছে! 👤");
@@ -671,8 +1049,10 @@ export default function AdminPage() {
   const toggleUserStatus = async (id: string, currentStatus: "active" | "inactive" | "banned") => {
     const nextStatus = currentStatus === "active" ? "banned" : "active";
     try {
+      const u = users.find((x) => x.id === id);
       await updateStudentStatus(id, nextStatus);
       setUsers(users.map((u) => (u.id === id ? { ...u, status: nextStatus } : u)));
+      logAction("status_change", "user", u?.name || id, `নতুন স্ট্যাটাস: ${nextStatus}`);
       showToast(`ইউজার স্ট্যাটাস পরিবর্তন: ${nextStatus === "active" ? "অ্যাক্টিভ" : "ব্যান"} 🔄`);
     } catch (err) {
       showToast("স্ট্যাটাস আপডেট ব্যর্থ হয়েছে");
@@ -681,8 +1061,10 @@ export default function AdminPage() {
 
   const handleDeleteQuiz = async (id: string) => {
     try {
+      const q = quizzes.find((x) => x.id === id);
       await deleteQuizDoc(id);
       setQuizzes(quizzes.filter((q) => q.id !== id));
+      logAction("delete", "quiz", q?.title || q?.name || id);
       showToast("Firebase থেকে কুইজ ডিলিট করা হয়েছে! 🗑️");
     } catch (err) {
       showToast("কুইজ ডিলিট করা যায়নি");
@@ -691,8 +1073,10 @@ export default function AdminPage() {
 
   const handleDeleteUser = async (id: string) => {
     try {
+      const u = users.find((x) => x.id === id);
       await deleteStudent(id);
       setUsers(users.filter((u) => u.id !== id));
+      logAction("delete", "user", u?.name || id, `ইমেইল: ${u?.email || ""}`);
       showToast("Firebase থেকে ইউজার ডিলিট করা হয়েছে! 🗑️");
     } catch (err) {
       showToast("ইউজার ডিলিট করা যায়নি");
@@ -763,11 +1147,13 @@ export default function AdminPage() {
         setBanners(
           banners.map((b) => (b.id === editingBanner.id ? { ...b, ...itemPayload } : b))
         );
+        logAction("update", "banner", itemPayload.title);
         showToast("ব্যানার ক্যারোজেল আপডেট হয়েছে! ✏️");
       } else {
         const itemWithOrder = { ...itemPayload, order: banners.length + 1 };
         const id = await addBannerDoc(itemWithOrder);
         setBanners([...banners, { ...itemWithOrder, id }]);
+        logAction("create", "banner", itemPayload.title);
         showToast("নতুন ব্যানার ক্যারোজেল যোগ হয়েছে! 🎨");
       }
       setIsAddBannerOpen(false);
@@ -780,8 +1166,10 @@ export default function AdminPage() {
 
   const handleDeleteBanner = async (id: string) => {
     try {
+      const b = banners.find((x) => x.id === id);
       await deleteBannerDoc(id);
       setBanners(banners.filter((b) => b.id !== id));
+      logAction("delete", "banner", b?.title || id);
       showToast("ব্যানার মুছে ফেলা হয়েছে! 🗑️");
     } catch (err) {
       showToast("ব্যানার ডিলিট করা যায়নি");
@@ -815,10 +1203,12 @@ export default function AdminPage() {
       if (editingChapter) {
         await updateChapter(editingChapter.id, payload);
         setAllChapters(allChapters.map((c) => (c.id === editingChapter.id ? { ...c, ...payload } : c)));
+        logAction("update", "chapter", payload.name);
         showToast("অধ্যায় আপডেট হয়েছে! ✏️");
       } else {
         const id = await addChapter(payload);
         setAllChapters([...allChapters, { ...payload, id }]);
+        logAction("create", "chapter", payload.name);
         showToast("নতুন অধ্যায় যোগ হয়েছে! 📚");
       }
       setIsAddChapterOpen(false);
@@ -831,8 +1221,10 @@ export default function AdminPage() {
 
   const handleDeleteChapter = async (id: string) => {
     try {
+      const ch = allChapters.find((c) => c.id === id);
       await deleteChapter(id);
       setAllChapters(allChapters.filter((c) => c.id !== id));
+      logAction("delete", "chapter", ch?.name || id);
       showToast("অধ্যায় মুছে ফেলা হয়েছে! 🗑️");
     } catch (err) {
       showToast("অধ্যায় ডিলিট করা যায়নি");
@@ -886,10 +1278,12 @@ export default function AdminPage() {
         setMissions(
           missions.map((m) => (m.id === editingMission.id ? { id: editingMission.id, ...newMission } : m))
         );
+        logAction("update", "mission", newMission.title, `টার্গেট: ${newMission.target}, এক্সপি: ${newMission.rewardXP}`);
         showToast("মিশন সফলভাবে আপডেট হয়েছে! 🎯");
       } else {
         const id = await addDailyMissionDoc(newMission);
         setMissions([...missions, { id, ...newMission }]);
+        logAction("create", "mission", newMission.title, `টার্গেট: ${newMission.target}, এক্সপি: ${newMission.rewardXP}`);
         showToast("নতুন দৈনিক মিশন তৈরি হয়েছে! 🚀");
       }
       setIsAddMissionOpen(false);
@@ -902,8 +1296,10 @@ export default function AdminPage() {
   const handleDeleteMission = async (id: string) => {
     if (!confirm("আপনি কি নিশ্চিত এই মিশনটি মুছে ফেলতে চান?")) return;
     try {
+      const m = missions.find((x) => x.id === id);
       await deleteDailyMissionDoc(id);
       setMissions(missions.filter((m) => m.id !== id));
+      logAction("delete", "mission", m?.title || id);
       showToast("মিশন মুছে ফেলা হয়েছে! 🗑️");
     } catch (err) {
       showToast("মিশন ডিলিট করা যায়নি");
@@ -912,8 +1308,10 @@ export default function AdminPage() {
 
   const handleToggleMissionActive = async (id: string, currentActive: boolean) => {
     try {
+      const m = missions.find((x) => x.id === id);
       await updateDailyMissionDoc(id, { active: !currentActive });
       setMissions(missions.map((m) => (m.id === id ? { ...m, active: !currentActive } : m)));
+      logAction("status_change", "mission", m?.title || id, !currentActive ? "সক্রিয় করা হয়েছে" : "নিষ্ক্রিয় করা হয়েছে");
       showToast(`মিশন ${!currentActive ? "সক্রিয় (Active)" : "নিষ্ক্রিয় (Inactive)"} করা হয়েছে! ✅`);
     } catch (err) {
       showToast("স্ট্যাটাস পরিবর্তন করা যায়নি");
@@ -923,6 +1321,7 @@ export default function AdminPage() {
   const handleSaveMissionSettings = async () => {
     try {
       await saveDailyMissionsSettings(missionSettings);
+      logAction("update", "settings", "দৈনিক মিশন গ্লোবাল সেটিংস", `বোনাস এক্সপি: ${missionSettings.allClearBonusXP}`);
       showToast("দৈনিক মিশন সেটিংস সংরক্ষণ করা হয়েছে! ⚙️");
     } catch (err) {
       showToast("সেটিংস সেভ করতে ত্রুটি হয়েছে");
@@ -935,6 +1334,7 @@ export default function AdminPage() {
       const defs = await resetDefaultDailyMissions();
       setMissions(defs);
       setMissionSettings(DEFAULT_GLOBAL_SETTINGS);
+      logAction("reset", "mission", "সব দৈনিক মিশন ডিফল্ট রিসেট");
       showToast("ডিফল্ট ৩টি মিশন এবং সেটিংস রিস্টোর করা হয়েছে! 🔄");
     } catch (err) {
       showToast("রিসেট করতে সমস্যা হয়েছে");
@@ -949,6 +1349,7 @@ export default function AdminPage() {
     { id: "questions", label: "প্রশ্ন ব্যাংক (Questions)", icon: HelpCircle, badge: String(questions.length), badgeColor: "bg-teal-100 text-teal-800" },
     { id: "subjects", label: "বিষয় ও অধ্যায়", icon: BookOpen, badge: String(subjects.length), badgeColor: "bg-indigo-100 text-indigo-800" },
     { id: "users", label: "ইউজারস ও পারমিশন", icon: Users, badge: String(users.length), badgeColor: "bg-indigo-100 text-indigo-800" },
+    { id: "activity", label: "অ্যাডমিন অ্যাক্টিভিটি লগ", icon: Activity, badge: activityLogs.length > 0 ? String(activityLogs.length) : undefined, badgeColor: "bg-teal-500/20 text-teal-300 border border-teal-500/30" },
     { id: "analytics", label: "অ্যানালিটিক্স", icon: BarChart3 },
     { id: "settings", label: "সেটিংস", icon: Settings },
   ];
@@ -956,7 +1357,7 @@ export default function AdminPage() {
   const navItems = allNavItems.filter((item) => {
     if (currentUserRole === "super_admin") return true;
     if (currentUserRole === "admin") return item.id !== "settings";
-    if (currentUserRole === "moderator") return item.id !== "users" && item.id !== "settings";
+    if (currentUserRole === "moderator") return item.id !== "users" && item.id !== "settings" && item.id !== "activity";
     if (currentUserRole === "content_creator") {
       return (
         item.id === "dashboard" ||
@@ -1126,25 +1527,37 @@ export default function AdminPage() {
             </div>
 
             <button
-              onClick={() => setIsBulkUploadOpen(true)}
+              onClick={handleOpenBulkUpload}
               className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10.5px] font-extrabold transition-all shadow-lg shadow-purple-600/20 cursor-pointer"
             >
               <Upload width={12} height={12} />
               <span className="hidden sm:inline">JSON Bulk</span>
             </button>
 
-            <button
-              onClick={() => {
-                if (activeNav === "subjects") setIsAddSubjectOpen(true);
-                else if (activeNav === "users") setIsAddUserOpen(true);
-                else if (activeNav === "banners") handleOpenAddBanner();
-                else setIsAddQuizOpen(true);
-              }}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-500 rounded-lg text-white text-[10.5px] font-extrabold transition-all shadow-lg shadow-teal-600/20 cursor-pointer"
-            >
-              <Plus width={12} height={12} />
-              <span className="hidden sm:inline">নতুন যোগ</span>
-            </button>
+            {activeNav === "activity" ? (
+              <button
+                onClick={fetchActivityLogs}
+                disabled={activityLoading}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 rounded-lg text-white text-[10.5px] font-extrabold transition-all shadow-lg shadow-teal-600/20 cursor-pointer"
+              >
+                <RefreshCw width={12} height={12} className={activityLoading ? "animate-spin" : ""} />
+                <span className="hidden sm:inline">লগ রিফ্রেশ</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  if (activeNav === "subjects") setIsAddSubjectOpen(true);
+                  else if (activeNav === "users") setIsAddUserOpen(true);
+                  else if (activeNav === "banners") handleOpenAddBanner();
+                  else if (activeNav === "missions") handleOpenAddMission();
+                  else setIsAddQuizOpen(true);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-500 rounded-lg text-white text-[10.5px] font-extrabold transition-all shadow-lg shadow-teal-600/20 cursor-pointer"
+              >
+                <Plus width={12} height={12} />
+                <span className="hidden sm:inline">নতুন যোগ</span>
+              </button>
+            )}
 
             <button
               onClick={async () => {
@@ -1542,7 +1955,7 @@ export default function AdminPage() {
                       </button>
 
                       <button
-                        onClick={() => setIsBulkUploadOpen(true)}
+                        onClick={handleOpenBulkUpload}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-extrabold transition-all shadow"
                       >
                         <Upload width={13} height={13} /> Bulk JSON Upload
@@ -1703,54 +2116,302 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* QUIZZES TABLE */}
-              {(activeNav === "dashboard" || activeNav === "quizzes") && (
-                <div className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80">
-                    <div>
-                      <p className="text-sm font-extrabold text-white">কুইজ ম্যানেজমেন্ট ({quizzes.length})</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">সব ড্রপ-ডাউন সিলেক্টর সহ তৈরি কুইজ</p>
+              {/* QUIZZES & LIVE EXAMS TAB */}
+              {(activeNav === "dashboard" || activeNav === "quizzes") && (() => {
+                const liveCount = quizzes.filter((q) => q.status === "live" || q.isLive).length;
+                const scheduledCount = quizzes.filter((q) => q.status === "scheduled").length;
+                const totalQuestionsCount = quizzes.reduce((sum, q) => sum + (q.questions?.length || q.questionsCount || 0), 0);
+
+                const filteredQuizzes = quizzes.filter((q) => {
+                  if (quizClassFilter !== "all" && q.classId !== quizClassFilter) return false;
+                  if (quizStatusFilter !== "all") {
+                    if (quizStatusFilter === "live" && !(q.status === "live" || q.isLive)) return false;
+                    if (quizStatusFilter === "scheduled" && q.status !== "scheduled") return false;
+                    if (quizStatusFilter === "draft" && q.status !== "draft") return false;
+                    if (quizStatusFilter === "completed" && q.status !== "completed") return false;
+                  }
+                  if (searchQuery) {
+                    const qText = `${q.title || q.name} ${q.subject || ""} ${q.chapterName || ""}`.toLowerCase();
+                    if (!qText.includes(searchQuery.toLowerCase())) return false;
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-4">
+                    {/* Header with Stats Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+                          <ListChecks width={20} height={20} className="text-teal-400" />
+                          কুইজ ও লাইভ এক্সাম ম্যানেজমেন্ট ({quizzes.length}টি কুইজ)
+                        </h2>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          ক্লাস অনুযায়ী লাইভ পরীক্ষা, JSON প্রশ্ন সেটআপ ও শিডিউলিং কন্ট্রোল
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleOpenAddQuiz}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white rounded-xl text-xs font-black shadow-lg shadow-teal-500/20 transition-all cursor-pointer"
+                        >
+                          <Plus width={14} height={14} />
+                          <span>নতুন কুইজ / লাইভ এক্সাম</span>
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={() => setIsAddQuizOpen(true)} className="flex items-center gap-1 text-[10px] font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-lg hover:bg-teal-500/20 transition-all">
-                      <Plus width={10} height={10} /> নতুন কুইজ
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-slate-800/60">
-                          {["কুইজ নাম", "বিষয়", "প্রশ্ন", "অ্যাটেম্পট", "গড় স্কোর", "স্ট্যাটাস", "অ্যাকশন"].map((h) => (
-                            <th key={h} className="px-4 py-2.5 text-left text-[9px] font-extrabold text-slate-500 uppercase tracking-widest">{h}</th>
+
+                    {/* Stats Counter Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">মোট কুইজ</p>
+                          <p className="text-lg font-black text-white mt-0.5">{quizzes.length}টি</p>
+                        </div>
+                        <div className="h-8 w-8 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
+                          <ListChecks width={16} height={16} />
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-slate-900/90 border border-rose-500/30 flex items-center justify-between relative overflow-hidden">
+                        {liveCount > 0 && <div className="absolute top-0 right-0 h-1.5 w-1.5 rounded-full bg-rose-500 animate-ping m-1.5" />}
+                        <div>
+                          <p className="text-[10px] font-bold text-rose-300 uppercase tracking-wider">🔴 লাইভ চলছে</p>
+                          <p className="text-lg font-black text-rose-400 mt-0.5">{liveCount}টি</p>
+                        </div>
+                        <div className="h-8 w-8 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                          <Radio width={16} height={16} />
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">🕒 শিডিউলড</p>
+                          <p className="text-lg font-black text-amber-400 mt-0.5">{scheduledCount}টি</p>
+                        </div>
+                        <div className="h-8 w-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                          <Clock width={16} height={16} />
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800/80 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">📝 মোট প্রশ্ন</p>
+                          <p className="text-lg font-black text-indigo-400 mt-0.5">{totalQuestionsCount}টি</p>
+                        </div>
+                        <div className="h-8 w-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                          <HelpCircle width={16} height={16} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Filter Toolbar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 rounded-2xl bg-slate-900 border border-slate-800/80 text-xs">
+                      {/* Class Filter */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-slate-400">ক্লাস ফিল্টার:</span>
+                        <select
+                          value={quizClassFilter}
+                          onChange={(e) => setQuizClassFilter(e.target.value)}
+                          className="px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-xl text-teal-400 font-extrabold focus:outline-none cursor-pointer"
+                        >
+                          <option value="all">সকল ক্লাস (All Classes)</option>
+                          {classes.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {quizzes.map((q) => (
-                          <tr key={q.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 transition-colors group">
-                            <td className="px-4 py-2.5 text-xs font-bold text-white max-w-[160px] truncate">{q.name}</td>
-                            <td className="px-4 py-2.5">
-                              <span className="text-[10px] font-bold text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded-md">{q.subject}</span>
-                            </td>
-                            <td className="px-4 py-2.5 text-[11px] text-slate-400">{q.questionsCount || 10}টি</td>
-                            <td className="px-4 py-2.5 text-[11px] font-bold text-indigo-400">{q.attempts || 0}</td>
-                            <td className="px-4 py-2.5 text-[11px] font-black text-teal-400">{q.avgScore || "৭৫%"}</td>
-                            <td className="px-4 py-2.5">
-                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${q.status === "published" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
-                                {q.status === "published" ? "● পাবলিশড" : "◌ ড্রাফট"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5">
-                              <button onClick={() => handleDeleteQuiz(q.id)} title="মুছে ফেলুন" className="h-6 w-6 rounded-md bg-slate-700 flex items-center justify-center text-slate-400 hover:text-rose-400 transition-all opacity-0 group-hover:opacity-100">
-                                <Trash2 width={11} height={11} />
-                              </button>
-                            </td>
-                          </tr>
+                        </select>
+                      </div>
+
+                      {/* Status Filter Tabs */}
+                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                        {[
+                          { id: "all", label: "সব" },
+                          { id: "live", label: "🔴 লাইভ" },
+                          { id: "scheduled", label: "🕒 শিডিউল" },
+                          { id: "published", label: "● সাধারণ" },
+                          { id: "completed", label: "✔️ সমাপ্ত" },
+                        ].map((tab) => (
+                          <button
+                            key={tab.id}
+                            onClick={() => setQuizStatusFilter(tab.id)}
+                            className={`px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold transition-all cursor-pointer ${
+                              quizStatusFilter === tab.id
+                                ? "bg-teal-500 text-white shadow-sm"
+                                : "text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    </div>
+
+                    {/* Quizzes Table */}
+                    <div className="rounded-2xl bg-slate-900 border border-slate-800/80 overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-slate-800/80 bg-slate-950/50">
+                              <th className="px-4 py-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">কুইজ ও ক্লাস</th>
+                              <th className="px-4 py-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">বিষয় ও অধ্যায়</th>
+                              <th className="px-4 py-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">প্রশ্ন সংখ্যা</th>
+                              <th className="px-4 py-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">সময় ও মার্কিং</th>
+                              <th className="px-4 py-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">স্ট্যাটাস ও লাইভ</th>
+                              <th className="px-4 py-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider text-right">অ্যাকশন</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/50">
+                            {filteredQuizzes.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-12 text-center text-slate-500 text-xs">
+                                  <ListChecks className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                                  <p className="font-bold">কোনো কুইজ পাওয়া যায়নি</p>
+                                  <p className="text-[10px] text-slate-600 mt-0.5">নতুন কুইজ তৈরি করতে উপরের বাটনে ক্লিক করুন</p>
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredQuizzes.map((q) => {
+                                const isLive = q.status === "live" || q.isLive;
+                                const totalQ = q.questions?.length || q.questionsCount || 0;
+                                const targetClass = classes.find((c) => c.id === q.classId)?.name || (q.classId === "all" ? "সকল ক্লাস" : q.classId);
+
+                                return (
+                                  <tr key={q.id} className="hover:bg-slate-800/40 transition-colors group">
+                                    {/* Title & Target Class */}
+                                    <td className="px-4 py-3">
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-black text-white">{q.title || q.name}</p>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-[9.5px] font-black text-teal-300 bg-teal-500/15 border border-teal-500/30 px-2 py-0.5 rounded-md">
+                                            🎓 {targetClass}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Subject & Chapter */}
+                                    <td className="px-4 py-3">
+                                      <div className="space-y-0.5">
+                                        <span className="text-[10.5px] font-bold text-slate-200 bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700/60">
+                                          {q.subjectName || q.subject || "সাধারণ"}
+                                        </span>
+                                        {q.chapterName && (
+                                          <p className="text-[10px] text-slate-400 truncate max-w-[150px]">
+                                            📖 {q.chapterName}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Questions Count & Viewer Button */}
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-lg">
+                                          {totalQ}টি প্রশ্ন
+                                        </span>
+                                        {totalQ > 0 && (
+                                          <button
+                                            onClick={() => handleOpenViewQuestions(q)}
+                                            title="প্রশ্নসমূহ দেখুন"
+                                            className="text-[10px] font-bold text-slate-400 hover:text-indigo-300 underline underline-offset-2 cursor-pointer flex items-center gap-0.5"
+                                          >
+                                            <Eye width={11} height={11} /> দেখুন
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Duration & Negative Marking */}
+                                    <td className="px-4 py-3 text-xs">
+                                      <div className="space-y-0.5 text-slate-300">
+                                        <div className="flex items-center gap-1 font-bold">
+                                          <Clock width={12} height={12} className="text-slate-400" />
+                                          <span>{q.duration || 15} মিনিট</span>
+                                        </div>
+                                        {q.negativeMarking ? (
+                                          <span className="text-[9px] font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.2 rounded border border-rose-500/20">
+                                            ⚠️ নেগেটিভ মার্কিং
+                                          </span>
+                                        ) : (
+                                          <span className="text-[9px] font-medium text-slate-500">
+                                            নেগেটিভ নেই
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Status & Live Control */}
+                                    <td className="px-4 py-3">
+                                      <div className="space-y-1.5">
+                                        {isLive ? (
+                                          <div className="inline-flex items-center gap-1.5 bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[10px] font-black px-2.5 py-1 rounded-full animate-pulse">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                                            <span>🔴 লাইভ চলছে</span>
+                                          </div>
+                                        ) : q.status === "scheduled" ? (
+                                          <span className="inline-flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
+                                            <Clock width={10} height={10} /> শিডিউলড
+                                          </span>
+                                        ) : q.status === "completed" ? (
+                                          <span className="inline-flex items-center gap-1 bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                                            ✔️ সমাপ্ত
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                                            ● পাবলিশড
+                                          </span>
+                                        )}
+
+                                        {/* Toggle Live Exam Button */}
+                                        <div>
+                                          <button
+                                            onClick={() => handleToggleLiveStatus(q)}
+                                            className={`text-[9.5px] font-black px-2 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                                              isLive
+                                                ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500 shadow-sm"
+                                                : "bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border-slate-700"
+                                            }`}
+                                          >
+                                            <Radio width={11} height={11} className={isLive ? "animate-spin" : ""} />
+                                            <span>{isLive ? "লাইভ সমাপ্ত করুন" : "⚡ লাইভ শুরু করুন"}</span>
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Action Buttons */}
+                                    <td className="px-4 py-3 text-right">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        <button
+                                          onClick={() => handleOpenEditQuiz(q)}
+                                          title="এডিট করুন"
+                                          className="h-7 w-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 hover:text-teal-400 hover:border-teal-500/50 transition-all cursor-pointer"
+                                        >
+                                          <Edit3 width={12} height={12} />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteQuiz(q.id)}
+                                          title="মুছে ফেলুন"
+                                          className="h-7 w-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-rose-400 hover:border-rose-500/50 transition-all cursor-pointer"
+                                        >
+                                          <Trash2 width={12} height={12} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* SUBJECTS TAB */}
               {activeNav === "subjects" && (
@@ -2269,99 +2930,771 @@ export default function AdminPage() {
                 </div>
               );
             })()}
+
+              {/* ========================================================= */}
+              {/* ===== ADMIN ACTIVITY & AUDIT LOGS SECTION ===== */}
+              {/* ========================================================= */}
+              {activeNav === "activity" && (() => {
+                const distinctAdmins = Array.from(
+                  new Map(
+                    activityLogs.map((log) => [
+                      log.adminEmail || log.adminId,
+                      { name: log.adminName || "অ্যাডমিন", email: log.adminEmail || "", id: log.adminId || "" },
+                    ])
+                  ).values()
+                );
+
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+
+                const todayLogsCount = activityLogs.filter((log) => {
+                  if (!log.timestamp) return false;
+                  const logDate =
+                    typeof log.timestamp?.toDate === "function"
+                      ? log.timestamp.toDate()
+                      : new Date(log.timestamp);
+                  return logDate >= todayStart;
+                }).length;
+
+                // Most active admin calculation
+                const adminCounts: Record<string, { name: string; count: number }> = {};
+                activityLogs.forEach((l) => {
+                  const key = l.adminEmail || l.adminName || "অ্যাডমিন";
+                  if (!adminCounts[key]) {
+                    adminCounts[key] = { name: l.adminName || key, count: 0 };
+                  }
+                  adminCounts[key].count += 1;
+                });
+                const topAdmin = Object.values(adminCounts).sort((a, b) => b.count - a.count)[0];
+
+                const filteredActivityLogs = activityLogs.filter((log) => {
+                  if (activityAdminFilter !== "all") {
+                    if (log.adminId !== activityAdminFilter && log.adminEmail !== activityAdminFilter) {
+                      return false;
+                    }
+                  }
+                  if (activityEntityFilter !== "all" && log.entityType !== activityEntityFilter) {
+                    return false;
+                  }
+                  if (activityActionFilter !== "all" && log.action !== activityActionFilter) {
+                    return false;
+                  }
+                  if (activitySearchQuery.trim()) {
+                    const q = activitySearchQuery.toLowerCase();
+                    const matchName = log.adminName?.toLowerCase().includes(q);
+                    const matchEmail = log.adminEmail?.toLowerCase().includes(q);
+                    const matchEntity = log.entityName?.toLowerCase().includes(q);
+                    const matchDetails = log.details?.toLowerCase().includes(q);
+                    const matchAction = ACTION_LABELS[log.action]?.toLowerCase().includes(q);
+                    const matchEntityType = ENTITY_LABELS[log.entityType]?.toLowerCase().includes(q);
+                    if (!matchName && !matchEmail && !matchEntity && !matchDetails && !matchAction && !matchEntityType) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-5 animate-fadeIn">
+                    {/* Header Banner */}
+                    <div className="p-5 rounded-2xl bg-gradient-to-r from-teal-900/40 via-slate-900 to-indigo-950/50 border border-teal-500/20 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                            <Activity width={18} height={18} />
+                          </div>
+                          <h2 className="text-base font-black text-white">অ্যাডমিন অ্যাক্টিভিটি ও অডিট লগ</h2>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                            Audit Trail
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          কোন অ্যাডমিন কখন কী পরিবর্তন (যোগ, আপডেট, ডিলিট, লাইভ টগল, রোল চেঞ্জ) করেছেন তার বিস্তারিত রিয়েল-টাইম রেকর্ড।
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={fetchActivityLogs}
+                          disabled={activityLoading}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
+                        >
+                          <RefreshCw width={14} height={14} className={activityLoading ? "animate-spin text-teal-400" : "text-teal-400"} />
+                          <span>{activityLoading ? "রিফ্রেশ হচ্ছে..." : "লগ রিফ্রেশ"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* KPI Statistics Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+                      {/* Stat 1: Total Logs */}
+                      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+                          <span>মোট কার্যক্রম</span>
+                          <BarChart3 width={15} height={15} className="text-teal-400" />
+                        </div>
+                        <p className="text-2xl font-black text-white">{activityLogs.length}</p>
+                        <p className="text-[10px] text-slate-500">সর্বমোট অডিট লগ এন্ট্রি</p>
+                      </div>
+
+                      {/* Stat 2: Active Admins */}
+                      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+                          <span>অ্যাক্টিভ অ্যাডমিন</span>
+                          <Users width={15} height={15} className="text-indigo-400" />
+                        </div>
+                        <p className="text-2xl font-black text-indigo-400">{distinctAdmins.length} জন</p>
+                        <p className="text-[10px] text-slate-500">কার্যক্রম পরিচালনা করেছেন</p>
+                      </div>
+
+                      {/* Stat 3: Today's Actions */}
+                      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+                          <span>আজকের পরিবর্তন</span>
+                          <Flame width={15} height={15} className="text-amber-400 fill-amber-400" />
+                        </div>
+                        <p className="text-2xl font-black text-amber-400">{todayLogsCount} টি</p>
+                        <p className="text-[10px] text-slate-500">আজকে সম্পন্ন অ্যাকশন</p>
+                      </div>
+
+                      {/* Stat 4: Top Contributor */}
+                      <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-1 relative overflow-hidden">
+                        <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+                          <span>সর্বাধিক সক্রিয়</span>
+                          <Crown width={15} height={15} className="text-purple-400 fill-purple-400" />
+                        </div>
+                        <p className="text-sm font-black text-purple-300 truncate">
+                          {topAdmin ? topAdmin.name : "—"}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {topAdmin ? `${topAdmin.count}টি অ্যাকশন সম্পন্ন` : "কোনো অ্যাকশন নেই"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Filter & Search Bar */}
+                    <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[260px]">
+                        {/* Search Input */}
+                        <div className="relative flex-1 min-w-[180px] max-w-sm">
+                          <Search width={14} height={14} className="absolute left-3 top-2.5 text-slate-500" />
+                          <input
+                            type="text"
+                            placeholder="অ্যাডমিন, বিষয়, কুইজ দিয়ে খুঁজুন..."
+                            value={activitySearchQuery}
+                            onChange={(e) => setActivitySearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 py-1.5 bg-slate-800/90 border border-slate-700/80 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-teal-500 transition-all"
+                          />
+                          {activitySearchQuery && (
+                            <button
+                              onClick={() => setActivitySearchQuery("")}
+                              className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                            >
+                              <X width={14} height={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Admin Filter Dropdown */}
+                        <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/80 rounded-xl px-2.5 py-1">
+                          <Users width={13} height={13} className="text-slate-400" />
+                          <select
+                            value={activityAdminFilter}
+                            onChange={(e) => setActivityAdminFilter(e.target.value)}
+                            className="bg-transparent text-xs text-slate-200 font-bold focus:outline-none cursor-pointer pr-2"
+                          >
+                            <option value="all" className="bg-slate-900 text-slate-300">
+                              👤 সব অ্যাডমিন ({distinctAdmins.length})
+                            </option>
+                            {distinctAdmins.map((adm) => (
+                              <option key={adm.email || adm.id} value={adm.id || adm.email} className="bg-slate-900 text-slate-200">
+                                {adm.name} {adm.email ? `(${adm.email})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Entity Type Filter */}
+                        <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/80 rounded-xl px-2.5 py-1">
+                          <BookOpen width={13} height={13} className="text-slate-400" />
+                          <select
+                            value={activityEntityFilter}
+                            onChange={(e) => setActivityEntityFilter(e.target.value)}
+                            className="bg-transparent text-xs text-slate-200 font-bold focus:outline-none cursor-pointer pr-2"
+                          >
+                            <option value="all" className="bg-slate-900 text-slate-300">📂 সব বিভাগ</option>
+                            <option value="quiz" className="bg-slate-900 text-slate-200">📝 কুইজ (Quiz)</option>
+                            <option value="question" className="bg-slate-900 text-slate-200">❓ প্রশ্ন (Question)</option>
+                            <option value="subject" className="bg-slate-900 text-slate-200">📚 বিষয় (Subject)</option>
+                            <option value="chapter" className="bg-slate-900 text-slate-200">📖 অধ্যায় (Chapter)</option>
+                            <option value="mission" className="bg-slate-900 text-slate-200">🎯 দৈনিক মিশন (Mission)</option>
+                            <option value="banner" className="bg-slate-900 text-slate-200">🖼️ ব্যানার (Banner)</option>
+                            <option value="user" className="bg-slate-900 text-slate-200">👤 ইউজার ও রোল (User)</option>
+                            <option value="settings" className="bg-slate-900 text-slate-200">⚙️ সেটিংস (Settings)</option>
+                          </select>
+                        </div>
+
+                        {/* Action Type Filter */}
+                        <div className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700/80 rounded-xl px-2.5 py-1">
+                          <Zap width={13} height={13} className="text-slate-400" />
+                          <select
+                            value={activityActionFilter}
+                            onChange={(e) => setActivityActionFilter(e.target.value)}
+                            className="bg-transparent text-xs text-slate-200 font-bold focus:outline-none cursor-pointer pr-2"
+                          >
+                            <option value="all" className="bg-slate-900 text-slate-300">⚡ সব অ্যাকশন</option>
+                            <option value="create" className="bg-slate-900 text-slate-200">➕ তৈরি (Create)</option>
+                            <option value="update" className="bg-slate-900 text-slate-200">✏️ আপডেট (Update)</option>
+                            <option value="delete" className="bg-slate-900 text-slate-200">🗑️ মুছে ফেলা (Delete)</option>
+                            <option value="toggle_live" className="bg-slate-900 text-slate-200">🔴 লাইভ টগল (Live Toggle)</option>
+                            <option value="role_change" className="bg-slate-900 text-slate-200">🛡️ রোল পরিবর্তন (Role Change)</option>
+                            <option value="status_change" className="bg-slate-900 text-slate-200">🔄 স্ট্যাটাস পরিবর্তন (Status Change)</option>
+                            <option value="bulk_upload" className="bg-slate-900 text-slate-200">📦 বাল্ক আপলোড (Bulk Upload)</option>
+                            <option value="reset" className="bg-slate-900 text-slate-200">🔄 রিসেট (Reset)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Clear Filters Button */}
+                      {(activityAdminFilter !== "all" ||
+                        activityEntityFilter !== "all" ||
+                        activityActionFilter !== "all" ||
+                        activitySearchQuery.trim() !== "") && (
+                        <button
+                          onClick={() => {
+                            setActivityAdminFilter("all");
+                            setActivityEntityFilter("all");
+                            setActivityActionFilter("all");
+                            setActivitySearchQuery("");
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <X width={12} height={12} /> ফিল্টার রিসেট
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Activity Logs Table */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                      {activityLoading ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-3">
+                          <Loader2 width={28} height={28} className="animate-spin text-teal-400" />
+                          <p className="text-xs font-bold">অ্যাক্টিভিটি লগ লোড হচ্ছে...</p>
+                        </div>
+                      ) : filteredActivityLogs.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-500 space-y-3">
+                          <div className="h-12 w-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400">
+                            <Activity width={24} height={24} />
+                          </div>
+                          <p className="text-sm font-bold text-slate-300">কোনো অ্যাক্টিভিটি লগ পাওয়া যায়নি</p>
+                          <p className="text-xs text-slate-500 max-w-xs text-center">
+                            অ্যাডমিন প্যানেল থেকে কোনো পরিবর্তন করা হলে তা স্বয়ংক্রিয়ভাবে এখানে যুক্ত হবে।
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto no-scrollbar">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-800 bg-slate-950/60 text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                                <th className="px-4 py-3">অ্যাডমিন (Admin)</th>
+                                <th className="px-4 py-3">অ্যাকশন ও বিভাগ (Action)</th>
+                                <th className="px-4 py-3">টার্গেট ও বিস্তারিত বিবরণ (Details)</th>
+                                <th className="px-4 py-3 text-right">সময় (Timestamp)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/60 text-xs">
+                              {filteredActivityLogs.map((log) => {
+                                const actionColor =
+                                  ACTION_COLORS[log.action] || "text-slate-300 bg-slate-800 border-slate-700";
+                                const actionLabel = ACTION_LABELS[log.action] || log.action;
+                                const entityIcon = ENTITY_ICONS[log.entityType] || "📁";
+                                const entityLabel = ENTITY_LABELS[log.entityType] || log.entityType;
+                                const entityColor = ENTITY_COLORS[log.entityType] || "text-slate-300";
+
+                                return (
+                                  <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                                    {/* Admin Column */}
+                                    <td className="px-4 py-3 align-top">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-teal-500 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow-md flex-shrink-0">
+                                          {(log.adminName || log.adminEmail || "A").substring(0, 1).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-black text-white truncate">
+                                            {log.adminName || "অ্যাডমিন"}
+                                          </p>
+                                          <p className="text-[10px] text-slate-400 font-mono truncate">
+                                            {log.adminEmail || log.adminId || "system"}
+                                          </p>
+                                          {log.adminRole && (
+                                            <span className="inline-block mt-0.5 text-[9px] font-black px-1.5 py-0.2 rounded-md bg-slate-800 text-slate-300 border border-slate-700 uppercase">
+                                              {log.adminRole.replace("_", " ")}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Action & Category Column */}
+                                    <td className="px-4 py-3 align-top">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${actionColor}`}>
+                                            {actionLabel}
+                                          </span>
+                                          <span className={`text-[11px] font-bold flex items-center gap-1 ${entityColor}`}>
+                                            <span>{entityIcon}</span>
+                                            <span>{entityLabel}</span>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Target Name & Details Column */}
+                                    <td className="px-4 py-3 align-top">
+                                      <div className="space-y-0.5 max-w-md">
+                                        <p className="text-xs font-extrabold text-slate-100 break-words">
+                                          {log.entityName || "—"}
+                                        </p>
+                                        {log.details && (
+                                          <p className="text-[11px] text-slate-400 font-medium break-words bg-slate-800/40 px-2 py-1 rounded-lg border border-slate-800">
+                                            ℹ️ {log.details}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Time Column */}
+                                    <td className="px-4 py-3 align-top text-right whitespace-nowrap">
+                                      <div className="space-y-0.5">
+                                        <span className="text-[10.5px] font-black px-2 py-0.5 rounded-md bg-slate-800/80 text-teal-300 border border-slate-700/80 inline-block font-mono">
+                                          ⏱️ {formatRelativeTime(log.timestamp)}
+                                        </span>
+                                        <p className="text-[10px] text-slate-500 font-medium">
+                                          {formatFullDateTime(log.timestamp)}
+                                        </p>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
         </main>
       </div>
 
-      {/* ===== MODAL: ADD QUIZ (WITH CASCADING SELECTORS: CLASS, SUBJECT, CHAPTER) ===== */}
+      {/* ===== MODAL: CREATE / EDIT QUIZ & LIVE EXAM (WITH JSON QUESTION IMPORTER) ===== */}
       {isAddQuizOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                <ListChecks width={16} height={16} className="text-teal-400" />
-                নতুন কুইজ তৈরি (Class/Subject/Chapter সিলেক্টর সহ)
-              </h3>
-              <button onClick={() => setIsAddQuizOpen(false)} className="text-slate-400 hover:text-white">
-                <X width={16} height={16} />
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl p-5 sm:p-6 space-y-4 shadow-2xl my-8 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400">
+                  <ListChecks width={18} height={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    {editingQuiz ? "কুইজ / লাইভ এক্সাম এডিট করুন" : "নতুন কুইজ / লাইভ পরীক্ষা তৈরি"}
+                  </h3>
+                  <p className="text-[10.5px] text-slate-400">
+                    ক্লাস সিলেক্ট করে JSON ফরম্যাটে প্রশ্ন যুক্ত করুন
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAddQuizOpen(false);
+                  setEditingQuiz(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X width={18} height={18} />
               </button>
             </div>
-            <form onSubmit={handleAddQuiz} className="space-y-3 text-xs">
+
+            {/* Modal Scrollable Body */}
+            <form onSubmit={handleSaveQuiz} className="space-y-4 text-xs overflow-y-auto flex-1 pr-1">
+              {/* Quiz Title */}
               <div>
-                <label className="block text-slate-400 font-bold mb-1">কুইজ টাইটেল</label>
+                <label className="block text-slate-300 font-bold mb-1">
+                  কুইজ / পরীক্ষার টাইটেল <span className="text-rose-400">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="যেমন: বীজগণিতীয় রাশি - সেট A"
-                  value={newQuiz.name}
-                  onChange={(e) => setNewQuiz({ ...newQuiz, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-teal-500"
+                  placeholder="যেমন: নবম শ্রেণী বিজ্ঞান - অধ্যায় ১ বিশেষ লাইভ কুইজ"
+                  value={quizForm.title}
+                  onChange={(e) => setQuizForm({ ...quizForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-teal-500 font-medium"
                 />
               </div>
 
-              {/* 3 CASCADING DROPDOWNS: CLASS, SUBJECT, CHAPTER */}
-              <div className="grid grid-cols-3 gap-2">
+              {/* Class, Subject, Chapter Selectors */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1. Class */}
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class)</label>
+                  <label className="block text-slate-300 font-bold mb-1">১. টার্গেট ক্লাস (Class)</label>
                   <select
-                    value={selectedClassId}
-                    onChange={(e) => setSelectedClassId(e.target.value)}
-                    className="w-full px-2 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                    value={quizForm.classId}
+                    onChange={(e) => {
+                      const newCls = e.target.value;
+                      const subsInClass = newCls === "all" ? subjects : subjects.filter((s) => s.classId === newCls);
+                      const newSub = subsInClass.some((s) => s.id === quizForm.subjectId) ? quizForm.subjectId : "";
+                      setQuizForm({ ...quizForm, classId: newCls, subjectId: newSub, chapterId: "" });
+                    }}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-teal-400 font-bold focus:outline-none focus:border-teal-500"
                   >
-                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <option value="all">সকল ক্লাস (All Classes)</option>
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
+                {/* 2. Subject */}
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">২. বিষয় (Subject)</label>
+                  <label className="block text-slate-300 font-bold mb-1">২. বিষয় (Subject)</label>
                   <select
-                    value={selectedSubjectId}
-                    onChange={(e) => setSelectedSubjectId(e.target.value)}
-                    className="w-full px-2 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                    value={quizForm.subjectId}
+                    onChange={(e) => setQuizForm({ ...quizForm, subjectId: e.target.value, chapterId: "" })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-indigo-300 font-bold focus:outline-none focus:border-indigo-500"
                   >
-                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    <option value="">বিষয় নির্বাচন করুন</option>
+                    {(quizForm.classId === "all"
+                      ? subjects
+                      : subjects.filter((s) => s.classId === quizForm.classId)
+                    ).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
+                {/* 3. Chapter */}
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">৩. অধ্যায় (Chapter)</label>
+                  <label className="block text-slate-300 font-bold mb-1">৩. অধ্যায় (ঐচ্ছিক)</label>
                   <select
-                    value={selectedChapterId}
-                    onChange={(e) => setSelectedChapterId(e.target.value)}
-                    className="w-full px-2 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
+                    value={quizForm.chapterId}
+                    onChange={(e) => setQuizForm({ ...quizForm, chapterId: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-bold focus:outline-none"
                   >
-                    {chapters.map(ch => <option key={ch.id} value={ch.id}>{ch.name}</option>)}
+                    <option value="">সম্পূর্ণ বিষয় / সকল অধ্যায়</option>
+                    {allChapters
+                      .filter((ch) => quizForm.subjectId && ch.subjectId === quizForm.subjectId)
+                      .map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          অধ্যায় {ch.chapterNo}: {ch.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">প্রশ্ন সংখ্যা</label>
-                  <input
-                    type="number"
-                    value={newQuiz.questionsCount}
-                    onChange={(e) => setNewQuiz({ ...newQuiz, questionsCount: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
-                  />
+              {/* Status & Live Exam Settings */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Status Mode */}
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">এক্সাম মোড ও স্ট্যাটাস</label>
+                    <select
+                      value={quizForm.status}
+                      onChange={(e) => setQuizForm({ ...quizForm, status: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-black focus:outline-none"
+                    >
+                      <option value="published">● সাধারণ পাবলিশড (Published)</option>
+                      <option value="live">🔴 লাইভ এক্সাম (Live Now)</option>
+                      <option value="scheduled">🕒 শিডিউল (Scheduled)</option>
+                      <option value="draft">📝 ড্রাফট (Draft)</option>
+                    </select>
+                  </div>
+
+                  {/* Duration */}
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">সময় সীমা (মিনিট)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={quizForm.duration}
+                      onChange={(e) => setQuizForm({ ...quizForm, duration: Number(e.target.value) })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Negative Marking Toggle */}
+                  <div className="flex flex-col justify-end">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={quizForm.negativeMarking}
+                        onChange={(e) => setQuizForm({ ...quizForm, negativeMarking: e.target.checked })}
+                        className="rounded accent-rose-500 w-4 h-4"
+                      />
+                      <span className="text-[11px] font-bold text-slate-300">
+                        নেগেটিভ মার্কিং চালু
+                      </span>
+                    </label>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-slate-400 font-bold mb-1">স্ট্যাটাস</label>
-                  <select
-                    value={newQuiz.status}
-                    onChange={(e) => setNewQuiz({ ...newQuiz, status: e.target.value as any })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none"
-                  >
-                    <option value="published">পাবলিশড (Published)</option>
-                    <option value="draft">ড্রাফট (Draft)</option>
-                  </select>
-                </div>
+
+                {/* Scheduled Start and End Timings (if scheduled) */}
+                {quizForm.status === "scheduled" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="block text-[11px] font-bold text-amber-300 mb-1">
+                        🕒 শুরুর সময় (Start Date & Time)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={quizForm.startTime}
+                        onChange={(e) => setQuizForm({ ...quizForm, startTime: e.target.value })}
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-amber-300 mb-1">
+                        🏁 সমাপ্তির সময় (End Date & Time)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={quizForm.endTime}
+                        onChange={(e) => setQuizForm({ ...quizForm, endTime: e.target.value })}
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setIsAddQuizOpen(false)} className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold">বাতিল</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-extrabold shadow-lg">Firebase-এ সেভ করুন</button>
+              {/* JSON Questions Importer */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <FileJson width={15} height={15} className="text-purple-400" />
+                    <label className="text-slate-200 font-extrabold text-xs">
+                      কুইজ প্রশ্নসমূহ (JSON Importer)
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleLoadSampleJson}
+                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-teal-300 rounded-lg text-[10.5px] font-bold transition-all border border-slate-700 cursor-pointer"
+                    >
+                      📝 নমুনা JSON লোড
+                    </button>
+
+                    <label className="px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg text-[10.5px] font-bold transition-all border border-purple-500/30 cursor-pointer flex items-center gap-1">
+                      <Upload width={11} height={11} />
+                      <span>.JSON ফাইল</span>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        onChange={handleJsonFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={8}
+                  placeholder={`[\n  {\n    "questionText": "বাংলাদেশের রাজধানী কোনটি?",\n    "options": ["ঢাকা", "চট্টগ্রাম", "সিলেট", "রাজশাহী"],\n    "correctAnswer": 0,\n    "explanation": "ঢাকা বাংলাদেশের রাজধানী।"\n  }\n]`}
+                  value={quizForm.jsonInput}
+                  onChange={(e) => handleJsonChange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-2xl text-emerald-400 font-mono text-[11px] leading-relaxed focus:outline-none focus:border-purple-500"
+                />
+
+                {/* Validation Info Badge */}
+                {quizForm.jsonError ? (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[11px] font-bold">
+                    <AlertTriangle width={14} height={14} className="flex-shrink-0 text-rose-400" />
+                    <span>{quizForm.jsonError}</span>
+                  </div>
+                ) : quizForm.parsedQuestions.length > 0 ? (
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold">
+                    <div className="flex items-center gap-1.5">
+                      <CheckCircle2 width={14} height={14} className="text-emerald-400" />
+                      <span>✅ {quizForm.parsedQuestions.length}টি প্রশ্ন সঠিকভাবে শনাক্ত হয়েছে!</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">নিচে প্রিভিউ দেখে নিন</span>
+                  </div>
+                ) : null}
+
+                {/* Visual Questions Preview */}
+                {quizForm.parsedQuestions.length > 0 && (
+                  <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+                    <p className="text-[11px] font-black text-slate-300 uppercase tracking-wider">
+                      প্রশ্ন প্রিভিউ ({quizForm.parsedQuestions.length}টি প্রশ্ন):
+                    </p>
+                    <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                      {quizForm.parsedQuestions.map((q, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-xs"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="h-5 w-5 rounded-full bg-teal-500/20 text-teal-300 font-bold flex items-center justify-center text-[10px] flex-shrink-0">
+                              {idx + 1}
+                            </span>
+                            <p className="font-extrabold text-white">{q.questionText}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-1.5 pl-7">
+                            {q.options.map((opt, oIdx) => (
+                              <div
+                                key={oIdx}
+                                className={`px-2 py-1 rounded-lg text-[10.5px] flex items-center justify-between ${
+                                  oIdx === q.correctAnswer
+                                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold"
+                                    : "bg-slate-900 text-slate-400 border border-slate-800"
+                                }`}
+                              >
+                                <span>{opt}</span>
+                                {oIdx === q.correctAnswer && (
+                                  <Check width={12} height={12} className="text-emerald-400" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {q.explanation && (
+                            <p className="text-[10px] text-slate-400 pl-7">
+                              💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddQuizOpen(false);
+                    setEditingQuiz(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white font-black text-xs shadow-lg shadow-teal-500/25 transition-all cursor-pointer"
+                >
+                  {editingQuiz ? "আপডেট করুন ✨" : "Firebase-এ সংরক্ষণ করুন 🔥"}
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: QUESTION VIEWER ===== */}
+      {viewingQuizQuestions && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl p-5 sm:p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-shrink-0">
+              <div>
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  <Eye width={16} height={16} className="text-indigo-400" />
+                  {viewingQuizQuestions.title || viewingQuizQuestions.name}
+                </h3>
+                <p className="text-[10.5px] text-slate-400 mt-0.5">
+                  মোট প্রশ্ন: {viewingQuizQuestions.questions?.length || viewingQuizQuestions.questionsCount || 0}টি
+                </p>
+              </div>
+              <button
+                onClick={() => setViewingQuizQuestions(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X width={18} height={18} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-3 pr-1">
+              {!viewingQuizQuestions.questions || viewingQuizQuestions.questions.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-xs">
+                  <p>এই কুইজে এখনো কোনো সংরক্ষিত প্রশ্ন নেই।</p>
+                  <button
+                    onClick={() => {
+                      const q = viewingQuizQuestions;
+                      setViewingQuizQuestions(null);
+                      handleOpenEditQuiz(q);
+                    }}
+                    className="mt-2 text-teal-400 underline font-bold"
+                  >
+                    প্রশ্ন যোগ করতে এডিট করুন
+                  </button>
+                </div>
+              ) : (
+                viewingQuizQuestions.questions.map((q, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span className="h-6 w-6 rounded-full bg-teal-500/20 text-teal-300 font-black flex items-center justify-center text-xs flex-shrink-0">
+                        {idx + 1}
+                      </span>
+                      <p className="font-extrabold text-white leading-relaxed">
+                        {q.questionText || (q as any).question}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-8">
+                      {q.options.map((opt, oIdx) => (
+                        <div
+                          key={oIdx}
+                          className={`p-2 rounded-xl text-xs flex items-center justify-between ${
+                            oIdx === q.correctAnswer
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold"
+                              : "bg-slate-900 text-slate-400 border border-slate-800"
+                          }`}
+                        >
+                          <span>{opt}</span>
+                          {oIdx === q.correctAnswer && (
+                            <Check width={14} height={14} className="text-emerald-400" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {q.explanation && (
+                      <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 pl-8">
+                        💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setViewingQuizQuestions(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2381,7 +3714,7 @@ export default function AdminPage() {
             </div>
 
             <form onSubmit={handleBulkUpload} className="space-y-3 text-xs">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Class Select */}
                 <div>
                   <label className="block text-slate-400 font-bold mb-1">১. ক্লাস (Class)</label>
@@ -2389,13 +3722,22 @@ export default function AdminPage() {
                     value={bulkMeta.classId}
                     onChange={(e) => {
                       const newCls = e.target.value;
-                      const subForCls = subjects.find((s) => s.classId === newCls)?.id || subjects[0]?.id || "";
-                      const chForSub = allChapters.find((c) => c.subjectId === subForCls)?.id || "";
-                      setBulkMeta({ ...bulkMeta, classId: newCls, subjectId: subForCls, chapterId: chForSub });
+                      const filteredSubs = subjects.filter((s) => s.classId === newCls);
+                      const subForCls = filteredSubs[0]?.id || "";
+                      setBulkMeta({
+                        ...bulkMeta,
+                        classId: newCls,
+                        subjectId: subForCls,
+                        chapterId: "",
+                      });
                     }}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-teal-400 font-bold focus:outline-none focus:border-purple-500"
                   >
-                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -2406,12 +3748,23 @@ export default function AdminPage() {
                     value={bulkMeta.subjectId}
                     onChange={(e) => {
                       const newSub = e.target.value;
-                      const chForSub = allChapters.find((c) => c.subjectId === newSub)?.id || "";
-                      setBulkMeta({ ...bulkMeta, subjectId: newSub, chapterId: chForSub });
+                      setBulkMeta({ ...bulkMeta, subjectId: newSub, chapterId: "" });
                     }}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-300 font-bold focus:outline-none focus:border-purple-500"
                   >
-                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {(() => {
+                      const filteredSubs = subjects.filter(
+                        (s) => !bulkMeta.classId || s.classId === bulkMeta.classId
+                      );
+                      if (filteredSubs.length === 0) {
+                        return <option value="">কোনো বিষয় নেই</option>;
+                      }
+                      return filteredSubs.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ));
+                    })()}
                   </select>
                 </div>
 
@@ -2421,11 +3774,11 @@ export default function AdminPage() {
                   <select
                     value={bulkMeta.chapterId}
                     onChange={(e) => setBulkMeta({ ...bulkMeta, chapterId: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-amber-300 font-bold focus:outline-none focus:border-amber-400"
                   >
                     <option value="">অধ্যায় সিলেক্ট করুন (অপশনাল)</option>
                     {allChapters
-                      .filter((c) => !bulkMeta.subjectId || c.subjectId === bulkMeta.subjectId)
+                      .filter((c) => bulkMeta.subjectId && c.subjectId === bulkMeta.subjectId)
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}
@@ -2480,48 +3833,68 @@ export default function AdminPage() {
             </div>
 
             <form onSubmit={handleCreateQuestion} className="space-y-3 text-xs">
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">ক্লাস</label>
+                  <label className="block text-slate-400 font-bold mb-1">১. ক্লাস</label>
                   <select
                     value={newQuestion.classId}
                     onChange={(e) => {
                       const newCls = e.target.value;
-                      const subForCls = subjects.find((s) => s.classId === newCls)?.id || subjects[0]?.id || "";
-                      const chForSub = allChapters.find((c) => c.subjectId === subForCls)?.id || "";
-                      setNewQuestion({ ...newQuestion, classId: newCls, subjectId: subForCls, chapterId: chForSub });
+                      const filteredSubs = subjects.filter((s) => s.classId === newCls);
+                      const subForCls = filteredSubs[0]?.id || "";
+                      setNewQuestion({
+                        ...newQuestion,
+                        classId: newCls,
+                        subjectId: subForCls,
+                        chapterId: "",
+                      });
                     }}
-                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-teal-400 font-bold focus:outline-none"
                   >
-                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">বিষয়</label>
+                  <label className="block text-slate-400 font-bold mb-1">২. বিষয়</label>
                   <select
                     value={newQuestion.subjectId}
                     onChange={(e) => {
                       const newSub = e.target.value;
-                      const chForSub = allChapters.find((c) => c.subjectId === newSub)?.id || "";
-                      setNewQuestion({ ...newQuestion, subjectId: newSub, chapterId: chForSub });
+                      setNewQuestion({ ...newQuestion, subjectId: newSub, chapterId: "" });
                     }}
-                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-300 font-bold focus:outline-none"
                   >
-                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {(() => {
+                      const filteredSubs = subjects.filter(
+                        (s) => !newQuestion.classId || s.classId === newQuestion.classId
+                      );
+                      if (filteredSubs.length === 0) {
+                        return <option value="">কোনো বিষয় নেই</option>;
+                      }
+                      return filteredSubs.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ));
+                    })()}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-amber-400 font-extrabold mb-1">অধ্যায়</label>
+                  <label className="block text-amber-400 font-extrabold mb-1">৩. অধ্যায়</label>
                   <select
                     value={newQuestion.chapterId}
                     onChange={(e) => setNewQuestion({ ...newQuestion, chapterId: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-amber-300 font-bold focus:outline-none"
                   >
-                    <option value="">অধ্যায় নির্বাচন করুন</option>
+                    <option value="">অধ্যায় নির্বাচন করুন (ঐচ্ছিক)</option>
                     {allChapters
-                      .filter((c) => !newQuestion.subjectId || c.subjectId === newQuestion.subjectId)
+                      .filter((c) => newQuestion.subjectId && c.subjectId === newQuestion.subjectId)
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}
@@ -2605,39 +3978,69 @@ export default function AdminPage() {
             </div>
 
             <form onSubmit={handleUpdateQuestion} className="space-y-3 text-xs">
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">ক্লাস</label>
+                  <label className="block text-slate-400 font-bold mb-1">১. ক্লাস</label>
                   <select
                     value={editingQuestion.classId || "class6"}
-                    onChange={(e) => setEditingQuestion({ ...editingQuestion, classId: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    onChange={(e) => {
+                      const newCls = e.target.value;
+                      const filteredSubs = subjects.filter((s) => s.classId === newCls);
+                      const subForCls = filteredSubs.some((s) => s.id === editingQuestion.subjectId)
+                        ? editingQuestion.subjectId
+                        : filteredSubs[0]?.id || "";
+                      setEditingQuestion({
+                        ...editingQuestion,
+                        classId: newCls,
+                        subjectId: subForCls,
+                        chapterId: "",
+                      });
+                    }}
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-teal-400 font-bold focus:outline-none"
                   >
-                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {classes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-bold mb-1">বিষয়</label>
+                  <label className="block text-slate-400 font-bold mb-1">২. বিষয়</label>
                   <select
                     value={editingQuestion.subjectId || ""}
-                    onChange={(e) => setEditingQuestion({ ...editingQuestion, subjectId: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-bold focus:outline-none"
+                    onChange={(e) =>
+                      setEditingQuestion({ ...editingQuestion, subjectId: e.target.value, chapterId: "" })
+                    }
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-slate-700 rounded-xl text-indigo-300 font-bold focus:outline-none"
                   >
-                    {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {(() => {
+                      const filteredSubs = subjects.filter(
+                        (s) => !editingQuestion.classId || s.classId === editingQuestion.classId
+                      );
+                      if (filteredSubs.length === 0) {
+                        return <option value="">কোনো বিষয় নেই</option>;
+                      }
+                      return filteredSubs.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ));
+                    })()}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-amber-400 font-extrabold mb-1">অধ্যায়</label>
+                  <label className="block text-amber-400 font-extrabold mb-1">৩. অধ্যায়</label>
                   <select
                     value={editingQuestion.chapterId || ""}
                     onChange={(e) => setEditingQuestion({ ...editingQuestion, chapterId: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-white font-bold focus:outline-none"
+                    className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-amber-300 font-bold focus:outline-none"
                   >
-                    <option value="">অধ্যায় সিলেক্ট করুন</option>
+                    <option value="">অধ্যায় সিলেক্ট করুন (ঐচ্ছিক)</option>
                     {allChapters
-                      .filter((c) => !editingQuestion.subjectId || c.subjectId === editingQuestion.subjectId)
+                      .filter((c) => editingQuestion.subjectId && c.subjectId === editingQuestion.subjectId)
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}

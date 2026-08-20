@@ -199,17 +199,53 @@ export default function SubjectGridSection({ subjectsList = [], isLoading = fals
                   )}
                 </div>
 
-                {/* 2. CLEAN TYPOGRAPHY & CHAPTER META (BELOW THE 3D BOOK) */}
-                <div className="mt-2 text-center px-0.5 space-y-0.5">
-                  <h4 className="text-[11px] font-black text-slate-800 leading-tight truncate group-hover:text-teal-600 transition-colors">
-                    {subject.name}
-                  </h4>
-                  <p className="text-[9px] font-bold text-slate-600 flex items-center justify-center gap-1">
-                    <BookOpen width={9} height={9} className="text-slate-400 flex-shrink-0" />
-                    <span>
-                      {totalCh > 0 ? `${completedCh}/${totalCh} অধ্যায়` : "অনুশীলন শুরু"}
-                    </span>
-                  </p>
+                {/* 2. CLEAN TYPOGRAPHY & COMPREHENSIVE PROGRESS BAR (BELOW THE 3D BOOK) */}
+                <div className="mt-2 space-y-1.5 px-0.5">
+                  <div className="text-center">
+                    <h4 className="text-[11.5px] font-black text-slate-800 leading-tight truncate group-hover:text-teal-600 transition-colors">
+                      {subject.name}
+                    </h4>
+                  </div>
+
+                  {/* Progress Bar Container */}
+                  <div className="space-y-1">
+                    <div className="h-1.5 w-full bg-slate-200/90 rounded-full overflow-hidden p-[1px] border border-slate-300/40">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isCompleted
+                            ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                            : subject.progress > 0
+                            ? "bg-gradient-to-r from-teal-500 to-indigo-500 shadow-[0_0_8px_rgba(13,148,136,0.4)]"
+                            : "bg-transparent"
+                        }`}
+                        style={{ width: `${Math.max(subject.progress > 0 ? 8 : 0, subject.progress)}%` }}
+                      />
+                    </div>
+
+                    {/* Progress Stats details */}
+                    <div className="flex items-center justify-between text-[8.5px] font-extrabold text-slate-500 px-0.5">
+                      <span>
+                        {totalCh > 0 ? `${completedCh}/${totalCh} অধ্যায়` : `${subject.progress}%`}
+                      </span>
+                      <span
+                        className={
+                          isCompleted
+                            ? "text-emerald-600 font-black"
+                            : subject.progress > 0
+                            ? "text-teal-600 font-black"
+                            : "text-slate-400 font-bold"
+                        }
+                      >
+                        {isCompleted
+                          ? "সম্পন্ন ✨"
+                          : totalCh > 0 && totalCh - completedCh > 0
+                          ? `${totalCh - completedCh}টি বাকি`
+                          : subject.progress > 0
+                          ? `${subject.progress}%`
+                          : "শুরু করুন"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             );

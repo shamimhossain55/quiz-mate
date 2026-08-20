@@ -3,6 +3,9 @@
 interface QuizProgressProps {
   currentQuestion: number;
   totalQuestions: number;
+  answers?: Record<string, number>;
+  questions?: any[];
+  onSelectQuestion?: (index: number) => void;
 }
 
 export default function QuizProgress({

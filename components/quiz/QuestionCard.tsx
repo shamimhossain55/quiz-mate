@@ -7,14 +7,20 @@ import { HelpCircle } from "lucide-react";
 interface QuestionCardProps {
   question: Question;
   selectedAnswer?: number;
-  onAnswerSelect: (answerIndex: number) => void;
+  onAnswerSelect?: (answerIndex: number) => void;
+  onSelectAnswer?: (answerIndex: number) => void;
+  questionIndex?: number;
 }
 
 export default function QuestionCard({
   question,
   selectedAnswer,
   onAnswerSelect,
+  onSelectAnswer,
+  questionIndex,
 }: QuestionCardProps) {
+  const handleSelect = onSelectAnswer || onAnswerSelect;
+
   return (
     <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-sm space-y-4 relative overflow-hidden">
       {/* Subtle top decoration glow */}
@@ -25,7 +31,7 @@ export default function QuestionCard({
         <div className="flex items-center gap-1.5">
           <HelpCircle width={14} height={14} className="text-teal-600" />
           <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 uppercase tracking-wide">
-            প্রশ্নপত্র
+            {questionIndex ? `প্রশ্ন ${questionIndex}` : "প্রশ্নপত্র"}
           </span>
         </div>
 
@@ -42,7 +48,7 @@ export default function QuestionCard({
             index={index}
             text={option}
             selected={selectedAnswer === index}
-            onClick={() => onAnswerSelect(index)}
+            onClick={() => handleSelect && handleSelect(index)}
           />
         ))}
       </div>

@@ -27,18 +27,49 @@ export interface Chapter {
   sectionName?: string;
 }
 
+export interface QuizQuestionItem {
+  id?: string;
+  questionText?: string;
+  question?: string;
+  options: string[];
+  correctAnswer: number;
+  explanation?: string;
+  order?: number;
+}
+
 export interface Quiz {
   id: string;
-  chapterId: string;
+  name?: string;
   title: string;
+  classId?: string;
+  subjectId?: string;
+  subjectName?: string;
+  subject?: string;
+  chapterId?: string;
+  chapterName?: string;
   duration: number;
   totalQuestions: number;
+  questionsCount?: number;
+  negativeMarking?: boolean;
+  status: "live" | "scheduled" | "published" | "draft" | "completed";
+  isLive?: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
+  questions?: QuizQuestionItem[];
+  attempts?: number;
+  avgScore?: string;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Question {
   id: string;
+  quizId?: string;
+  classId?: string;
+  subjectId?: string;
   chapterId: string;
   question: string;
+  questionText?: string;
   options: string[];
   correctAnswer: number;
   explanation: string;

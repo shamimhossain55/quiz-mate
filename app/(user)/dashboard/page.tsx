@@ -7,7 +7,6 @@ import BottomNav from "@/components/layout/BottomNav";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import QuickActionsDock from "@/components/dashboard/QuickActionsDock";
 import DailyMissionsCard from "@/components/dashboard/DailyMissionsCard";
-import ContinueLearningSection from "@/components/dashboard/ContinueLearningSection";
 import BannerCarousel from "@/components/dashboard/BannerCarousel";
 import SubjectGridSection, { SubjectItem } from "@/components/dashboard/SubjectGridSection";
 import { getSubjects } from "@/lib/firestore/subjects";
@@ -21,7 +20,8 @@ import {
   DailyMissionConfig,
   DailyMissionsGlobalSettings,
 } from "@/lib/firestore/missions";
-import { Student } from "@/types/firestore";
+import { listenToActiveLiveQuiz } from "@/lib/firestore/quizzes";
+import { Student, Quiz } from "@/types/firestore";
 
 const defaultPalette = [
   { color: "#0D9488", gradient: "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #047857 100%)", shadowColor: "rgba(13, 148, 136, 0.4)" },
@@ -56,6 +56,7 @@ export default function DashboardPage() {
   const [userResultsList, setUserResultsList] = useState<any[]>([]);
   const [dailyMissionsList, setDailyMissionsList] = useState<DailyMissionConfig[]>([]);
   const [missionsSettings, setMissionsSettings] = useState<DailyMissionsGlobalSettings | null>(null);
+  const [liveQuiz, setLiveQuiz] = useState<Quiz | null>(null);
 
   useEffect(() => {
     const userEmail = session?.user?.email?.toLowerCase() || null;
@@ -265,6 +266,14 @@ export default function DashboardPage() {
     };
   }, [session, router]);
 
+  // Real-time listener for active live quizzes matching student's class
+  useEffect(() => {
+    const unsub = listenToActiveLiveQuiz(student?.classId, (quiz) => {
+      setLiveQuiz(quiz);
+    });
+    return () => unsub();
+  }, [student?.classId]);
+
   // Today's results calculation for dynamic Daily Missions & Target
   const todayDateString = new Date().toDateString();
   const todayResults = userResultsList.filter((r) => {
@@ -312,16 +321,13 @@ export default function DashboardPage() {
           {/* 1. HERO PROMOTIONAL BANNER CAROUSEL */}
           <BannerCarousel slides={bannerList} />
 
-          {/* 2. QUICK ACTIONS SHORTCUT DOCK */}
-          <QuickActionsDock />
+          {/* 2. QUICK ACTIONS SHORTCUT DOCK (Includes Live Quiz Trigger & Popup) */}
+          <QuickActionsDock liveQuiz={liveQuiz} />
 
-          {/* 3. CONTINUE LEARNING (ACTIVE SUBJECT FOCUS) */}
-          <ContinueLearningSection subjectsList={subjectsList} />
-
-          {/* 4. CURRICULUM HUB (ALL SUBJECTS GRID) */}
+          {/* 3. CURRICULUM HUB (ALL SUBJECTS GRID WITH INTEGRATED PROGRESS BARS) */}
           <SubjectGridSection subjectsList={subjectsList} isLoading={isSubjectsLoading} />
 
-          {/* 5. GAMIFIED DAILY MISSIONS & REWARDS */}
+          {/* 4. GAMIFIED DAILY MISSIONS & REWARDS */}
           <DailyMissionsCard
             todayExamsPlayed={todayExamsPlayed}
             todayCorrectAnswers={todayCorrectAnswers}

@@ -61,15 +61,33 @@ export type AdminChapter = {
 export type AdminQuiz = {
   id: string;
   name: string;
+  title?: string;
   classId?: string;
   subjectId?: string;
-  chapterId?: string;
   subject?: string;
+  subjectName?: string;
+  chapterId?: string;
+  chapterName?: string;
+  duration?: number;
   questionsCount?: number;
+  totalQuestions?: number;
+  negativeMarking?: boolean;
   attempts?: number;
   avgScore?: string;
-  status: "published" | "draft";
+  status: "live" | "scheduled" | "published" | "draft" | "completed";
+  isLive?: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
+  questions?: Array<{
+    id?: string;
+    questionText?: string;
+    question?: string;
+    options: string[];
+    correctAnswer: number;
+    explanation?: string;
+  }>;
   createdAt?: any;
+  updatedAt?: any;
 };
 
 export type AdminQuestion = {
@@ -325,18 +343,34 @@ export async function getAllQuizzes(): Promise<AdminQuiz[]> {
   try {
     const querySnapshot = await getDocs(collection(db, "quizzes"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      name: docSnap.data().title || docSnap.data().name || docSnap.id,
-      subject: docSnap.data().subject || "সাধারণ",
-      classId: docSnap.data().classId,
-      subjectId: docSnap.data().subjectId,
-      chapterId: docSnap.data().chapterId,
-      questionsCount: docSnap.data().questionsCount || (docSnap.data().questions?.length || 10),
-      attempts: docSnap.data().attempts || 0,
-      avgScore: docSnap.data().avgScore || "৭৫%",
-      status: docSnap.data().status || "published",
-    }));
+    return querySnapshot.docs.map((docSnap) => {
+      const d = docSnap.data();
+      const questionsCount = d.questions?.length || d.totalQuestions || d.questionsCount || 0;
+      return {
+        id: docSnap.id,
+        name: d.title || d.name || "কুইজ",
+        title: d.title || d.name || "কুইজ",
+        subject: d.subject || d.subjectName || "সাধারণ",
+        subjectName: d.subjectName || d.subject || "সাধারণ",
+        classId: d.classId || "all",
+        subjectId: d.subjectId || "",
+        chapterId: d.chapterId || "",
+        chapterName: d.chapterName || "",
+        duration: d.duration || 10,
+        questionsCount,
+        totalQuestions: questionsCount,
+        negativeMarking: !!d.negativeMarking,
+        attempts: d.attempts || 0,
+        avgScore: d.avgScore || "০%",
+        status: d.status || "published",
+        isLive: d.status === "live" || !!d.isLive,
+        startTime: d.startTime || null,
+        endTime: d.endTime || null,
+        questions: d.questions || [],
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+      };
+    });
   } catch (err) {
     console.error("Error fetching quizzes:", err);
     return [];
@@ -345,19 +379,94 @@ export async function getAllQuizzes(): Promise<AdminQuiz[]> {
 
 export async function addQuiz(quiz: Omit<AdminQuiz, "id">): Promise<string> {
   const docRef = doc(collection(db, "quizzes"));
+  const duration = Number(quiz.duration) || 10;
+  const questionsCount = quiz.questions?.length || quiz.questionsCount || 10;
+
+  let startTime = quiz.startTime || null;
+  let endTime = quiz.endTime || null;
+  if (quiz.status === "live") {
+    if (!startTime) startTime = new Date().toISOString();
+    if (!endTime) endTime = new Date(Date.now() + duration * 60 * 1000).toISOString();
+  }
+
   await setDoc(docRef, {
-    title: quiz.name,
-    subject: quiz.subject,
-    classId: quiz.classId,
-    subjectId: quiz.subjectId,
-    chapterId: quiz.chapterId,
-    questionsCount: quiz.questionsCount || 10,
+    title: quiz.name || quiz.title || "নতুন কুইজ",
+    name: quiz.name || quiz.title || "নতুন কুইজ",
+    subject: quiz.subject || quiz.subjectName || "সাধারণ",
+    subjectName: quiz.subjectName || quiz.subject || "সাধারণ",
+    classId: quiz.classId || "all",
+    subjectId: quiz.subjectId || "",
+    chapterId: quiz.chapterId || "",
+    chapterName: quiz.chapterName || "",
+    duration,
+    questionsCount,
+    totalQuestions: questionsCount,
+    negativeMarking: !!quiz.negativeMarking,
     attempts: 0,
-    avgScore: "0%",
-    status: quiz.status,
+    avgScore: "০%",
+    status: quiz.status || "published",
+    isLive: quiz.status === "live",
+    startTime,
+    endTime,
+    questions: quiz.questions || [],
     createdAt: new Date(),
+    updatedAt: new Date(),
   });
   return docRef.id;
+}
+
+export async function updateQuizDoc(id: string, quiz: Partial<AdminQuiz>): Promise<void> {
+  const docRef = doc(db, "quizzes", id);
+  const cleanData: Record<string, any> = {};
+  if (quiz.name !== undefined || quiz.title !== undefined) {
+    cleanData.title = quiz.title || quiz.name;
+    cleanData.name = quiz.name || quiz.title;
+  }
+  if (quiz.subject !== undefined || quiz.subjectName !== undefined) {
+    cleanData.subject = quiz.subject || quiz.subjectName;
+    cleanData.subjectName = quiz.subjectName || quiz.subject;
+  }
+  if (quiz.classId !== undefined) cleanData.classId = quiz.classId;
+  if (quiz.subjectId !== undefined) cleanData.subjectId = quiz.subjectId;
+  if (quiz.chapterId !== undefined) cleanData.chapterId = quiz.chapterId;
+  if (quiz.chapterName !== undefined) cleanData.chapterName = quiz.chapterName;
+  if (quiz.duration !== undefined) cleanData.duration = Number(quiz.duration);
+  if (quiz.negativeMarking !== undefined) cleanData.negativeMarking = !!quiz.negativeMarking;
+  if (quiz.status !== undefined) {
+    cleanData.status = quiz.status;
+    cleanData.isLive = quiz.status === "live";
+  }
+  if (quiz.startTime !== undefined) cleanData.startTime = quiz.startTime;
+  if (quiz.endTime !== undefined) cleanData.endTime = quiz.endTime;
+  if (quiz.questions !== undefined) {
+    cleanData.questions = quiz.questions;
+    cleanData.questionsCount = quiz.questions.length;
+    cleanData.totalQuestions = quiz.questions.length;
+  }
+  cleanData.updatedAt = new Date();
+  await updateDoc(docRef, cleanData);
+}
+
+export async function toggleQuizLiveStatus(id: string, isLive: boolean, durationMinutes = 15): Promise<void> {
+  const docRef = doc(db, "quizzes", id);
+  const now = new Date();
+  const endTime = new Date(now.getTime() + durationMinutes * 60 * 1000);
+
+  if (isLive) {
+    await updateDoc(docRef, {
+      status: "live",
+      isLive: true,
+      startTime: now.toISOString(),
+      endTime: endTime.toISOString(),
+      updatedAt: new Date(),
+    });
+  } else {
+    await updateDoc(docRef, {
+      status: "completed",
+      isLive: false,
+      updatedAt: new Date(),
+    });
+  }
 }
 
 export async function deleteQuizDoc(id: string) {
