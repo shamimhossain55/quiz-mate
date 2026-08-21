@@ -136,20 +136,26 @@ export function listenToMessages(
     limitToLast(limit)
   );
 
-  onValue(q, (snapshot) => {
-    const msgs: RtdbMessage[] = [];
-    snapshot.forEach((child) => {
-      const data = child.val();
-      msgs.push({
-        id: child.key!,
-        senderId: data.senderId ?? "",
-        text: data.text ?? "",
-        timestamp: data.timestamp ?? Date.now(),
+  onValue(
+    q,
+    (snapshot) => {
+      const msgs: RtdbMessage[] = [];
+      snapshot.forEach((child) => {
+        const data = child.val();
+        msgs.push({
+          id: child.key!,
+          senderId: data.senderId ?? "",
+          text: data.text ?? "",
+          timestamp: data.timestamp ?? Date.now(),
+        });
       });
-    });
-    // RTDB orderByChild ইতিমধ্যে ascending sort করে, তাই reverse লাগবে না
-    callback(msgs);
-  });
+      // RTDB orderByChild ইতিমধ্যে ascending sort করে, তাই reverse লাগবে না
+      callback(msgs);
+    },
+    (err) => {
+      console.warn("RTDB listenToMessages error:", err);
+    }
+  );
 
   // Cleanup function
   return () => off(q);
@@ -195,10 +201,16 @@ export function listenToTyping(
   const convId = buildConvId(myEmail, friendEmail);
   const tRef = typingRef(convId, friendEmail);
 
-  onValue(tRef, (snapshot) => {
-    const data = snapshot.val() as TypingPayload | null;
-    callback(data?.isTyping === true);
-  });
+  onValue(
+    tRef,
+    (snapshot) => {
+      const data = snapshot.val() as TypingPayload | null;
+      callback(data?.isTyping === true);
+    },
+    (err) => {
+      console.warn("RTDB listenToTyping error:", err);
+    }
+  );
 
   return () => off(tRef);
 }
@@ -217,9 +229,15 @@ export function listenToAllTyping(
   const convId = buildConvId(myEmail, friendEmail);
   const tRef = typingConvRef(convId);
 
-  onValue(tRef, (snapshot) => {
-    callback((snapshot.val() as Record<string, TypingPayload>) ?? {});
-  });
+  onValue(
+    tRef,
+    (snapshot) => {
+      callback((snapshot.val() as Record<string, TypingPayload>) ?? {});
+    },
+    (err) => {
+      console.warn("RTDB listenToAllTyping error:", err);
+    }
+  );
 
   return () => off(tRef);
 }
