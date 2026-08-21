@@ -146,15 +146,26 @@ export async function getActiveLiveQuiz(studentClassId?: string): Promise<Quiz |
   }
 }
 
+let allQuizzesCache: { data: Quiz[]; timestamp: number } | null = null;
+const QUIZZES_CACHE_TTL_MS = 10 * 60 * 1000;
+
+export function clearQuizzesCache() {
+  allQuizzesCache = null;
+}
+
 /**
  * Real-time listener for active live quizzes for a student's class
+ * Filters by status ('live' or 'scheduled') instead of listening to the whole collection
  */
 export function listenToActiveLiveQuiz(
   studentClassId: string | undefined,
   callback: (quiz: Quiz | null) => void
 ): () => void {
   try {
-    const q = collection(db, "quizzes");
+    const q = query(
+      collection(db, "quizzes"),
+      where("status", "in", ["live", "scheduled"])
+    );
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -198,10 +209,15 @@ export function listenToActiveLiveQuiz(
 }
 
 export async function getAllQuizzes(): Promise<Quiz[]> {
+  if (allQuizzesCache && Date.now() - allQuizzesCache.timestamp < QUIZZES_CACHE_TTL_MS) {
+    return allQuizzesCache.data;
+  }
   try {
     const snapshot = await getDocs(collection(db, "quizzes"));
     if (snapshot.empty) return [];
-    return snapshot.docs.map((docSnap) => parseQuizDoc(docSnap));
+    const quizzes = snapshot.docs.map((docSnap) => parseQuizDoc(docSnap));
+    allQuizzesCache = { data: quizzes, timestamp: Date.now() };
+    return quizzes;
   } catch (err) {
     console.error("Error getAllQuizzes:", err);
     return [];

@@ -23,6 +23,7 @@ function isClassMatching(subjectClassId?: string, studentClassId?: string): bool
 }
 
 let subjectsMemoryCache: { [key: string]: { data: FirestoreSubject[]; timestamp: number } } = {};
+const SUBJECT_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 export function clearSubjectCache(): void {
   subjectsMemoryCache = {};
@@ -37,8 +38,7 @@ export async function getSubjects(
 ): Promise<FirestoreSubject[]> {
   const cacheKey = `${classId || "all"}_${group || "all"}`;
   const cached = subjectsMemoryCache[cacheKey];
-  // 30 seconds memory cache for fast client navigation
-  if (cached && Date.now() - cached.timestamp < 30000) {
+  if (cached && Date.now() - cached.timestamp < SUBJECT_CACHE_TTL_MS) {
     return cached.data;
   }
 

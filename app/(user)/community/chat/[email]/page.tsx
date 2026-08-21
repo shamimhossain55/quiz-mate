@@ -35,7 +35,7 @@ type Friend = {
 };
 
 const EMOJI_LIST = ["👍", "❤️", "😂", "🔥", "🎉", "😮", "👏", "💪", "😊", "🙏"];
-const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_MS = 5000;
 
 function formatTime(ms: number) {
   const d = new Date(ms);
@@ -193,13 +193,23 @@ export default function DedicatedChatPage({
     fetchMessages(false, 0);
 
     pollIntervalRef.current = setInterval(() => {
-      fetchMessages(true, lastTimestampRef.current);
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchMessages(true, lastTimestampRef.current);
+      }
     }, POLL_INTERVAL_MS);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchMessages(true, lastTimestampRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [friendEmail, myEmail, fetchMessages]);
 

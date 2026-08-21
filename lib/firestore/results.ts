@@ -23,6 +23,17 @@ interface SaveResultParams {
   timeTaken: number;
 }
 
+const resultsCache = new Map<string, { data: Result[]; timestamp: number }>();
+const RESULTS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+export function clearResultsCache(userId?: string) {
+  if (userId) {
+    resultsCache.delete(userId.toLowerCase());
+  } else {
+    resultsCache.clear();
+  }
+}
+
 export async function saveResult({
   userId,
   quizId,
@@ -35,6 +46,7 @@ export async function saveResult({
   negativeMarking,
   timeTaken,
 }: SaveResultParams) {
+  if (userId) clearResultsCache(userId);
   await addDoc(collection(db, "results"), {
     userId,
     quizId,
@@ -52,6 +64,11 @@ export async function saveResult({
 
 export async function getUserResults(userId: string): Promise<Result[]> {
   if (!userId) return [];
+  const normalizedId = userId.toLowerCase();
+  const cached = resultsCache.get(normalizedId);
+  if (cached && Date.now() - cached.timestamp < RESULTS_CACHE_TTL_MS) {
+    return cached.data;
+  }
   try {
     const rawUserIds = Array.from(new Set([userId, userId.toLowerCase()]));
     let docsMap = new Map<string, any>();
@@ -101,6 +118,7 @@ export async function getUserResults(userId: string): Promise<Result[]> {
     });
 
     results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    resultsCache.set(normalizedId, { data: results, timestamp: Date.now() });
     return results;
   } catch (err) {
     console.error("Error fetching user results:", err);

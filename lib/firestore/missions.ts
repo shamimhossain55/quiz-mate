@@ -86,16 +86,29 @@ export const DEFAULT_GLOBAL_SETTINGS: DailyMissionsGlobalSettings = {
   enabled: true,
 };
 
+let missionsConfigCache: { data: DailyMissionConfig[]; timestamp: number } | null = null;
+let missionsSettingsCache: { data: DailyMissionsGlobalSettings; timestamp: number } | null = null;
+const MISSIONS_CACHE_TTL_MS = 15 * 60 * 1000;
+
+export function clearMissionsCache(): void {
+  missionsConfigCache = null;
+  missionsSettingsCache = null;
+}
+
 /**
  * Fetch all daily mission configurations from Firestore.
  * If empty in Firestore, falls back to default missions.
  */
 export async function getDailyMissionsConfig(): Promise<DailyMissionConfig[]> {
+  if (missionsConfigCache && Date.now() - missionsConfigCache.timestamp < MISSIONS_CACHE_TTL_MS) {
+    return missionsConfigCache.data;
+  }
   try {
     const colRef = collection(db, "daily_missions_config");
     const snapshot = await getDocs(colRef);
 
     if (snapshot.empty) {
+      missionsConfigCache = { data: DEFAULT_DAILY_MISSIONS, timestamp: Date.now() };
       return DEFAULT_DAILY_MISSIONS;
     }
 
@@ -118,6 +131,7 @@ export async function getDailyMissionsConfig(): Promise<DailyMissionConfig[]> {
     });
 
     docs.sort((a, b) => a.order - b.order);
+    missionsConfigCache = { data: docs, timestamp: Date.now() };
     return docs;
   } catch (err) {
     console.error("Error fetching daily missions config:", err);
@@ -129,19 +143,25 @@ export async function getDailyMissionsConfig(): Promise<DailyMissionConfig[]> {
  * Fetch global daily mission settings (e.g. all-clear bonus XP, enabled state).
  */
 export async function getDailyMissionsSettings(): Promise<DailyMissionsGlobalSettings> {
+  if (missionsSettingsCache && Date.now() - missionsSettingsCache.timestamp < MISSIONS_CACHE_TTL_MS) {
+    return missionsSettingsCache.data;
+  }
   try {
     const docRef = doc(db, "system_settings", "daily_missions");
     const docSnap = await getDoc(docRef);
 
     if (!docSnap.exists()) {
+      missionsSettingsCache = { data: DEFAULT_GLOBAL_SETTINGS, timestamp: Date.now() };
       return DEFAULT_GLOBAL_SETTINGS;
     }
 
     const data = docSnap.data();
-    return {
+    const result = {
       allClearBonusXP: Number(data.allClearBonusXP ?? 100),
       enabled: data.enabled !== false,
     };
+    missionsSettingsCache = { data: result, timestamp: Date.now() };
+    return result;
   } catch (err) {
     console.error("Error fetching daily missions settings:", err);
     return DEFAULT_GLOBAL_SETTINGS;
@@ -155,6 +175,7 @@ export async function saveDailyMissionsSettings(
   settings: Partial<DailyMissionsGlobalSettings>
 ): Promise<void> {
   try {
+    clearMissionsCache();
     const docRef = doc(db, "system_settings", "daily_missions");
     await setDoc(
       docRef,
@@ -177,6 +198,7 @@ export async function addDailyMissionDoc(
   mission: Omit<DailyMissionConfig, "id">
 ): Promise<string> {
   try {
+    clearMissionsCache();
     const colRef = collection(db, "daily_missions_config");
     const docRef = await addDoc(colRef, {
       ...mission,
@@ -198,6 +220,7 @@ export async function updateDailyMissionDoc(
   updates: Partial<DailyMissionConfig>
 ): Promise<void> {
   try {
+    clearMissionsCache();
     const docRef = doc(db, "daily_missions_config", id);
     await setDoc(
       docRef,
@@ -218,6 +241,7 @@ export async function updateDailyMissionDoc(
  */
 export async function deleteDailyMissionDoc(id: string): Promise<void> {
   try {
+    clearMissionsCache();
     const docRef = doc(db, "daily_missions_config", id);
     await deleteDoc(docRef);
   } catch (err) {
@@ -231,6 +255,7 @@ export async function deleteDailyMissionDoc(id: string): Promise<void> {
  */
 export async function resetDefaultDailyMissions(): Promise<DailyMissionConfig[]> {
   try {
+    clearMissionsCache();
     // 1. Delete existing custom missions
     const colRef = collection(db, "daily_missions_config");
     const snapshot = await getDocs(colRef);

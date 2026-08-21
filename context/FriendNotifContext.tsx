@@ -47,7 +47,7 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
     }
   }, [status]);
 
-  // Poll every 30 seconds while authenticated
+  // Poll every 45 seconds while authenticated & tab is visible
   useEffect(() => {
     if (status !== "authenticated") {
       setPendingCount(0);
@@ -55,9 +55,23 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
       return;
     }
     fetchCount();
-    timerRef.current = setInterval(fetchCount, 30_000);
+
+    timerRef.current = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchCount();
+      }
+    }, 45_000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchCount();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [status, fetchCount]);
 

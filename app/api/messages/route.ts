@@ -84,18 +84,24 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  // Retrieve conversation metadata for lastMessage info
+  // Only fetch convDoc metadata on full load (not on every incremental poll) to save Firestore reads
   let lastMessage: { text: string; senderEmail: string; read: boolean; createdAt: number } | null = null;
-  const convDoc = await convRef.get();
-  if (convDoc.exists) {
-    const cData = convDoc.data() || {};
-    if (cData.lastMessage) {
-      lastMessage = {
-        text: cData.lastMessage,
-        senderEmail: cData.lastSender || "",
-        read: cData.lastMessageRead ?? true,
-        createdAt: cData.lastMessageAt?.toMillis?.() ?? Date.now(),
-      };
+  if (!sinceMs || sinceMs === 0 || messages.length > 0) {
+    try {
+      const convDoc = await convRef.get();
+      if (convDoc.exists) {
+        const cData = convDoc.data() || {};
+        if (cData.lastMessage) {
+          lastMessage = {
+            text: cData.lastMessage,
+            senderEmail: cData.lastSender || "",
+            read: cData.lastMessageRead ?? true,
+            createdAt: cData.lastMessageAt?.toMillis?.() ?? Date.now(),
+          };
+        }
+      }
+    } catch (e) {
+      // ignore
     }
   }
 

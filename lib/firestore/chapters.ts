@@ -9,12 +9,27 @@ import {
 import { db } from "@/lib/firebase-client";
 import { Chapter } from "@/types/firestore";
 
+const chaptersBySubjectCache = new Map<string, { data: Chapter[]; timestamp: number }>();
+let chaptersMemoryCache: { data: Chapter[]; timestamp: number } | null = null;
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+export function clearChapterCache(): void {
+  chaptersMemoryCache = null;
+  chaptersBySubjectCache.clear();
+}
+
 export async function getChapters(
   subjectId: string
 ): Promise<Chapter[]> {
   if (!subjectId) return [];
 
   const decodedId = decodeURIComponent(subjectId);
+  const cacheKey = decodedId.toLowerCase();
+  const cached = chaptersBySubjectCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const candidatesSet = new Set<string>([
     subjectId,
     decodedId,
@@ -49,50 +64,20 @@ export async function getChapters(
         ...(docSnap.data() as Omit<Chapter, "id">),
       }));
       docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+      chaptersBySubjectCache.set(cacheKey, { data: docs, timestamp: Date.now() });
       return docs;
     }
+    
+    chaptersBySubjectCache.set(cacheKey, { data: [], timestamp: Date.now() });
+    return [];
   } catch (err) {
-    console.error("Error with 'in' query for chapters:", err);
-  }
-
-  // Fallback: Fetch all chapters and match manually if specific query produced no results
-  try {
-    const snapshot = await getDocs(collection(db, "chapters"));
-    if (snapshot.empty) return [];
-
-    const matchedDocs = snapshot.docs
-      .map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Chapter, "id">),
-      }))
-      .filter((ch) => {
-        if (!ch.subjectId) return false;
-        const chSubId = ch.subjectId;
-        const decodedChSubId = decodeURIComponent(chSubId);
-        return (
-          candidates.includes(chSubId) ||
-          candidates.includes(decodedChSubId) ||
-          chSubId.toLowerCase().includes(decodedId.toLowerCase()) ||
-          decodedId.toLowerCase().includes(chSubId.toLowerCase())
-        );
-      });
-
-    matchedDocs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-    return matchedDocs;
-  } catch (err) {
-    console.error("Fallback error fetching chapters:", err);
+    console.error("Error fetching chapters:", err);
     return [];
   }
 }
 
-let chaptersMemoryCache: { data: Chapter[]; timestamp: number } | null = null;
-
-export function clearChapterCache(): void {
-  chaptersMemoryCache = null;
-}
-
 export async function getAllChapters(): Promise<Chapter[]> {
-  if (chaptersMemoryCache && Date.now() - chaptersMemoryCache.timestamp < 30000) {
+  if (chaptersMemoryCache && Date.now() - chaptersMemoryCache.timestamp < CACHE_TTL_MS) {
     return chaptersMemoryCache.data;
   }
   try {

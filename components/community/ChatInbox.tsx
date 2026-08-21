@@ -37,7 +37,7 @@ interface ChatInboxProps {
 }
 
 const EMOJI_LIST = ["👍", "❤️", "😂", "🔥", "🎉", "😮", "👏", "💪", "😊", "🙏"];
-const POLL_INTERVAL_MS = 2000; // poll every 2s for real-time feel
+const POLL_INTERVAL_MS = 5000; // poll every 5s (efficient & smooth)
 
 function formatTime(ms: number) {
   const d = new Date(ms);
@@ -164,18 +164,26 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
     setMessages([]);
     fetchMessages(false, 0); // full load, no since
 
-    // Incremental poll every 2s — only fetches messages newer than last known
+    // Incremental poll every 5s — pause when tab is in background
     pollIntervalRef.current = setInterval(() => {
-      if (isOpenRef.current) {
+      if (isOpenRef.current && typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchMessages(true, lastTimestampRef.current);
       }
     }, POLL_INTERVAL_MS);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && isOpenRef.current) {
+        fetchMessages(true, lastTimestampRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [isOpen, friend?.email, myEmail, fetchMessages]);
 
