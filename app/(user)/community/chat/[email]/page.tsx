@@ -11,17 +11,24 @@ import {
   CheckCheck,
   WifiOff,
   MessageCircle,
-  Shield,
   Zap,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import {
+  sendMessage,
+  listenToMessages,
+  setTypingIndicator,
+  listenToTyping,
+  type RtdbMessage,
+} from "@/lib/rtdb/chat-service";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Message = {
   id: string;
-  senderEmail: string;
+  senderId: string;
   text: string;
-  createdAt: number;
-  read?: boolean;
+  timestamp: number;
   pending?: boolean;
 };
 
@@ -34,8 +41,13 @@ type Friend = {
   customUid?: string;
 };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const EMOJI_LIST = ["👍", "❤️", "😂", "🔥", "🎉", "😮", "👏", "💪", "😊", "🙏"];
-const POLL_INTERVAL_MS = 5000;
+/** টাইপিং indicator কতক্ষণ পর auto-clear হবে (ms) */
+const TYPING_DEBOUNCE_MS = 1500;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatTime(ms: number) {
   const d = new Date(ms);
@@ -71,6 +83,8 @@ function colorFor(name: string) {
   return avatarColors[Math.abs(h) % avatarColors.length];
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function DedicatedChatPage({
   params,
 }: {
@@ -90,13 +104,16 @@ export default function DedicatedChatPage({
   const [showEmojis, setShowEmojis] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
+  const [isFriendTyping, setIsFriendTyping] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastTimestampRef = useRef<number>(0);
+  /** typing debounce timer */
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** আমি কি typing করছি — duplicate set এড়াতে */
+  const isTypingRef = useRef(false);
 
-  // ── 1. Fetch friend details ──────────────────────────────────
+  // ── 1. Load friend profile ────────────────────────────────────────────────
   useEffect(() => {
     async function loadFriendProfile() {
       try {
@@ -106,19 +123,15 @@ export default function DedicatedChatPage({
           const found = (data.friends || []).find(
             (f: any) => f.email?.toLowerCase() === friendEmail
           );
-          if (found) {
-            setFriend(found);
-          } else {
-            // Fallback object if not in friends list explicitly
-            setFriend({
+          setFriend(
+            found ?? {
               email: friendEmail,
               name: friendEmail.split("@")[0],
               avatarUrl: null,
-            });
-          }
+            }
+          );
         }
-      } catch (e) {
-        console.error("Failed to load friend info", e);
+      } catch {
         setFriend({
           email: friendEmail,
           name: friendEmail.split("@")[0],
@@ -129,131 +142,147 @@ export default function DedicatedChatPage({
     loadFriendProfile();
   }, [friendEmail]);
 
-  // ── 2. Fetch messages & mark read ────────────────────────────
-  const fetchMessages = useCallback(
-    async (silent = false, since?: number) => {
-      if (!friendEmail || !myEmail) return;
-      try {
-        let url = `/api/messages?friendEmail=${encodeURIComponent(
-          friendEmail
-        )}&markRead=true`;
-        if (since && since > 0) {
-          url += `&since=${since}`;
-        }
-
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-
-        const fetched: Message[] = (data.messages || []).map((m: any) => ({
-          id: m.id,
-          senderEmail: m.senderEmail,
-          text: m.text,
-          createdAt: typeof m.createdAt === "number" ? m.createdAt : Date.now(),
-          read: m.read ?? true,
-          pending: false,
-        }));
-
-        if (fetched.length > 0) {
-          const maxTs = Math.max(...fetched.map((m) => m.createdAt));
-          lastTimestampRef.current = Math.max(lastTimestampRef.current, maxTs);
-        }
-
-        if (since && since > 0) {
-          if (fetched.length > 0) {
-            setMessages((prev) => {
-              const existingIds = new Set(prev.map((m) => m.id));
-              const newOnes = fetched.filter((m) => !existingIds.has(m.id));
-              if (newOnes.length === 0) return prev;
-              const cleaned = prev.filter((m) => !m.pending);
-              return [...cleaned, ...newOnes];
-            });
-          }
-        } else {
-          setMessages(fetched);
-        }
-
-        setIsOffline(false);
-        if (!silent) setIsInitialLoading(false);
-      } catch {
-        setIsOffline(true);
-        if (!silent) setIsInitialLoading(false);
-      }
-    },
-    [friendEmail, myEmail]
-  );
-
-  // ── 3. Start polling ─────────────────────────────────────────
+  // ── 2. Real-time messages via RTDB onValue() ──────────────────────────────
   useEffect(() => {
-    if (!friendEmail || !myEmail) return;
+    if (!myEmail || !friendEmail) return;
 
     setIsInitialLoading(true);
-    lastTimestampRef.current = 0;
     setMessages([]);
-    fetchMessages(false, 0);
 
-    pollIntervalRef.current = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        fetchMessages(true, lastTimestampRef.current);
+    /**
+     * listenToMessages() returns an unsubscribe function.
+     * RTDB onValue() fires immediately with current data,
+     * তারপর প্রতিটা নতুন change-এ আবার fire করে।
+     * Polling দরকার নেই — এটাই RTDB এর সুবিধা।
+     */
+    let firstCall = true;
+    const unsubscribe = listenToMessages(
+      myEmail,
+      friendEmail,
+      80,
+      (rtdbMsgs: RtdbMessage[]) => {
+        const mapped: Message[] = rtdbMsgs.map((m) => ({
+          id: m.id,
+          senderId: m.senderId,
+          text: m.text,
+          timestamp: m.timestamp,
+          pending: false,
+        }));
+        setMessages(mapped);
+        setIsOffline(false);
+        if (firstCall) {
+          setIsInitialLoading(false);
+          firstCall = false;
+        }
       }
-    }, POLL_INTERVAL_MS);
+    );
 
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetchMessages(true, lastTimestampRef.current);
+    // Offline detection: setTimeout fallback — RTDB নিজেই reconnect করে
+    const offlineTimer = setTimeout(() => {
+      if (firstCall) {
+        setIsOffline(true);
+        setIsInitialLoading(false);
+        firstCall = false;
       }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
+    }, 10000);
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-      document.removeEventListener("visibilitychange", handleVisibility);
+      unsubscribe();
+      clearTimeout(offlineTimer);
     };
-  }, [friendEmail, myEmail, fetchMessages]);
+  }, [myEmail, friendEmail]);
 
-  // ── 4. Scroll to bottom ──────────────────────────────────────
+  // ── 3. Listen to friend's typing indicator (RTDB) ────────────────────────
+  useEffect(() => {
+    if (!myEmail || !friendEmail) return;
+
+    const unsubscribe = listenToTyping(myEmail, friendEmail, (typing) => {
+      setIsFriendTyping(typing);
+    });
+
+    return unsubscribe;
+  }, [myEmail, friendEmail]);
+
+  // ── 4. Scroll to bottom on new messages ──────────────────────────────────
   useEffect(() => {
     if (messages.length > 0) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages.length]);
 
-  // ── 5. Send message ──────────────────────────────────────────
+  // ── 5. Cleanup typing indicator on unmount ────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (myEmail && friendEmail && isTypingRef.current) {
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    };
+  }, [myEmail, friendEmail]);
+
+  // ── 6. Handle input change + typing indicator ────────────────────────────
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInputText(value);
+      if (!myEmail || !friendEmail) return;
+
+      // Debounced typing indicator
+      if (!isTypingRef.current && value.trim().length > 0) {
+        isTypingRef.current = true;
+        setTypingIndicator(myEmail, friendEmail, true).catch(() => {});
+      }
+
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+      if (value.trim().length === 0) {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+        return;
+      }
+
+      typingTimerRef.current = setTimeout(() => {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }, TYPING_DEBOUNCE_MS);
+    },
+    [myEmail, friendEmail]
+  );
+
+  // ── 7. Send message via RTDB ──────────────────────────────────────────────
   const handleSend = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || !friendEmail || isSending) return;
+      if (!trimmed || !friendEmail || !myEmail || isSending) return;
 
+      // Clear typing indicator immediately on send
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }
+
+      // Optimistic UI: pending message দেখাও
       const optimisticId = `pending_${Date.now()}`;
-      const optimisticTs = Date.now();
       const optimisticMsg: Message = {
         id: optimisticId,
-        senderEmail: myEmail,
+        senderId: myEmail,
         text: trimmed,
-        createdAt: optimisticTs,
+        timestamp: Date.now(),
         pending: true,
       };
-
       setMessages((prev) => [...prev, optimisticMsg]);
       setInputText("");
       setShowEmojis(false);
-
-      if (inputRef.current) {
-        inputRef.current.style.height = "42px";
-      }
+      if (inputRef.current) inputRef.current.style.height = "42px";
 
       setIsSending(true);
-
       try {
-        await fetch("/api/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ friendEmail, text: trimmed }),
-        });
-        await fetchMessages(true, optimisticTs - 100);
+        // RTDB-তে push — onValue() listener automatically নতুন message দেখাবে
+        await sendMessage(myEmail, friendEmail, trimmed);
+        // Optimistic message সরিয়ে নাও — listener নতুন real message আনবে
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } catch {
+        // Send failed — pending flag রাখো যাতে user জানে
         setMessages((prev) =>
           prev.map((m) =>
             m.id === optimisticId ? { ...m, pending: false } : m
@@ -264,7 +293,7 @@ export default function DedicatedChatPage({
         inputRef.current?.focus();
       }
     },
-    [friendEmail, isSending, myEmail, fetchMessages]
+    [friendEmail, myEmail, isSending]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -278,9 +307,12 @@ export default function DedicatedChatPage({
   const ac = colorFor(friendName);
   let lastDateLabel = "";
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-slate-50 mx-auto max-w-md shadow-2xl relative overflow-hidden">
-      {/* ── Top Navigation Header ─────────────────────────────────── */}
+
+      {/* ── Top Navigation Header ──────────────────────────────────── */}
       <header className="flex-shrink-0 px-4 py-3 bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -325,6 +357,16 @@ export default function DedicatedChatPage({
                 <WifiOff width={10} height={10} />
                 সংযোগ নেই
               </p>
+            ) : isFriendTyping ? (
+              /* Typing indicator ─ animated dots */
+              <p className="text-[10px] text-teal-600 font-bold flex items-center gap-1">
+                <span className="flex gap-0.5 items-center">
+                  <span className="w-1 h-1 rounded-full bg-teal-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-teal-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 rounded-full bg-teal-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>
+                টাইপ করছেন...
+              </p>
             ) : (
               <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -333,9 +375,15 @@ export default function DedicatedChatPage({
             )}
           </div>
         </div>
+
+        {/* RTDB badge */}
+        <div className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full bg-teal-50 border border-teal-200/60">
+          <Zap width={10} height={10} className="text-teal-600" />
+          <span className="text-[9px] font-extrabold text-teal-700">Live</span>
+        </div>
       </header>
 
-      {/* ── Messages Chat Body ───────────────────────────────────── */}
+      {/* ── Messages Chat Body ─────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 no-scrollbar bg-gradient-to-b from-slate-50 via-slate-100/40 to-slate-50">
         {isInitialLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 py-24">
@@ -352,22 +400,22 @@ export default function DedicatedChatPage({
                 {friendName}-এর সাথে কথোপকথন শুরু করুন!
               </p>
               <p className="text-[11px] text-slate-400 font-medium mt-1">
-                প্রথম মেসেজ পাঠিয়ে হাই জানান 👋
+                প্রথম মেসেজ পাঠিয়ে হাই জানান 👋
               </p>
             </div>
           </div>
         ) : (
           <>
             {messages.map((msg, idx) => {
-              const isMe = msg.senderEmail === myEmail;
-              const dateLabel = formatDateLabel(msg.createdAt);
+              const isMe = msg.senderId === myEmail;
+              const dateLabel = formatDateLabel(msg.timestamp);
               const showDateLabel = dateLabel !== lastDateLabel;
               if (showDateLabel) lastDateLabel = dateLabel;
 
               const prevMsg = idx > 0 ? messages[idx - 1] : null;
               const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null;
-              const isSameAsPrev = prevMsg?.senderEmail === msg.senderEmail;
-              const isSameAsNext = nextMsg?.senderEmail === msg.senderEmail;
+              const isSameAsPrev = prevMsg?.senderId === msg.senderId;
+              const isSameAsNext = nextMsg?.senderId === msg.senderId;
 
               return (
                 <div key={msg.id}>
@@ -417,7 +465,7 @@ export default function DedicatedChatPage({
                     >
                       <div
                         className={`px-4 py-2.5 text-sm leading-relaxed break-words transition-opacity ${
-                          msg.pending ? "opacity-70" : "opacity-100"
+                          msg.pending ? "opacity-60" : "opacity-100"
                         } ${
                           isMe
                             ? "bg-teal-600 text-white rounded-2xl rounded-br-xs shadow-xs"
@@ -434,7 +482,7 @@ export default function DedicatedChatPage({
                           }`}
                         >
                           <span className="text-[9px] text-slate-400 font-semibold">
-                            {formatTime(msg.createdAt)}
+                            {formatTime(msg.timestamp)}
                           </span>
                           {isMe && (
                             <CheckCheck
@@ -455,6 +503,30 @@ export default function DedicatedChatPage({
               );
             })}
 
+            {/* Friend typing indicator bubble */}
+            <AnimatePresence>
+              {isFriendTyping && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex items-end gap-2 mt-2"
+                >
+                  <div className={`h-7 w-7 rounded-full ${ac.bg} flex items-center justify-center shadow-xs border border-white flex-shrink-0`}>
+                    <span className={`${ac.text} font-black text-[11px]`}>
+                      {friendName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="bg-white rounded-2xl rounded-bl-xs shadow-xs border border-slate-200/90 px-4 py-3 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {isOffline && (
               <div className="flex items-center justify-center gap-1.5 py-2 text-[10px] text-rose-500 font-bold">
                 <WifiOff width={12} height={12} />
@@ -467,7 +539,7 @@ export default function DedicatedChatPage({
         )}
       </main>
 
-      {/* ── Quick Emoji Picker ────────────────────────────────────── */}
+      {/* ── Quick Emoji Picker ─────────────────────────────────────── */}
       <AnimatePresence>
         {showEmojis && (
           <motion.div
@@ -489,7 +561,7 @@ export default function DedicatedChatPage({
         )}
       </AnimatePresence>
 
-      {/* ── Bottom Input Toolbar ─────────────────────────────────── */}
+      {/* ── Bottom Input Toolbar ──────────────────────────────────── */}
       <footer className="flex-shrink-0 px-3 py-3 bg-white border-t border-slate-200/70 flex items-end gap-2 z-20">
         <button
           onClick={() => setShowEmojis((v) => !v)}
@@ -506,8 +578,9 @@ export default function DedicatedChatPage({
         <div className="flex-1 relative">
           <textarea
             ref={inputRef}
+            id="chat-input"
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="মেসেজ লিখুন..."
             rows={1}

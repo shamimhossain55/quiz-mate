@@ -11,15 +11,25 @@ import {
   Smile,
   CheckCheck,
   WifiOff,
+  Zap,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import {
+  sendMessage,
+  listenToMessages,
+  setTypingIndicator,
+  listenToTyping,
+  type RtdbMessage,
+} from "@/lib/rtdb/chat-service";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Message = {
   id: string;
-  senderEmail: string;
+  senderId: string;
   text: string;
-  createdAt: number;
-  pending?: boolean; // optimistic local message
+  timestamp: number;
+  pending?: boolean;
 };
 
 type Friend = {
@@ -36,8 +46,12 @@ interface ChatInboxProps {
   onClose: () => void;
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const EMOJI_LIST = ["👍", "❤️", "😂", "🔥", "🎉", "😮", "👏", "💪", "😊", "🙏"];
-const POLL_INTERVAL_MS = 5000; // poll every 5s (efficient & smooth)
+const TYPING_DEBOUNCE_MS = 1500;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatTime(ms: number) {
   const d = new Date(ms);
@@ -73,9 +87,12 @@ function colorFor(name: string) {
   return avatarColors[Math.abs(h) % avatarColors.length];
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
   const { data: session } = useSession();
   const myEmail = session?.user?.email?.toLowerCase() || "";
+  const friendEmail = friend?.email?.toLowerCase() || "";
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
@@ -83,166 +100,163 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
   const [showEmojis, setShowEmojis] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
-  const [isTyping, setIsTyping] = useState(false); // friend typing indicator
+  const [isFriendTyping, setIsFriendTyping] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastMessageCountRef = useRef(0);
-  const lastTimestampRef = useRef<number>(0); // track last known message ts for incremental polling
-  const isOpenRef = useRef(isOpen);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
 
+  // ── 1. Real-time messages via RTDB onValue() ──────────────────────────────
   useEffect(() => {
-    isOpenRef.current = isOpen;
-  }, [isOpen]);
+    if (!isOpen || !myEmail || !friendEmail) return;
 
-  // ── Fetch messages from API ─────────────────────────────────
-  const fetchMessages = useCallback(
-    async (silent = false, since?: number) => {
-      if (!friend?.email || !myEmail) return;
-      try {
-        let url = `/api/messages?friendEmail=${encodeURIComponent(friend.email)}`;
-        if (since && since > 0) {
-          // Incremental poll — only fetch new messages
-          url += `&since=${since}`;
-        }
+    setIsInitialLoading(true);
+    setMessages([]);
 
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
-
-        const fetched: Message[] = (data.messages || []).map((m: any) => ({
+    let firstCall = true;
+    const unsubscribe = listenToMessages(
+      myEmail,
+      friendEmail,
+      80,
+      (rtdbMsgs: RtdbMessage[]) => {
+        const mapped: Message[] = rtdbMsgs.map((m) => ({
           id: m.id,
-          senderEmail: m.senderEmail,
+          senderId: m.senderId,
           text: m.text,
-          createdAt: typeof m.createdAt === "number" ? m.createdAt : Date.now(),
+          timestamp: m.timestamp,
           pending: false,
         }));
-
-        if (fetched.length > 0) {
-          // Update last known timestamp
-          const maxTs = Math.max(...fetched.map((m) => m.createdAt));
-          lastTimestampRef.current = Math.max(lastTimestampRef.current, maxTs);
-        }
-
-        if (since && since > 0) {
-          // Incremental: append only truly new messages
-          if (fetched.length > 0) {
-            setMessages((prev) => {
-              const existingIds = new Set(prev.map((m) => m.id));
-              const newOnes = fetched.filter((m) => !existingIds.has(m.id));
-              if (newOnes.length === 0) return prev;
-              // Remove pending optimistic messages that match
-              const cleaned = prev.filter((m) => !m.pending);
-              return [...cleaned, ...newOnes];
-            });
-          }
-        } else {
-          // Full load on first open
-          setMessages(fetched);
-          lastMessageCountRef.current = fetched.length;
-        }
-
+        setMessages(mapped);
         setIsOffline(false);
-        if (!silent) setIsInitialLoading(false);
-      } catch {
+        if (firstCall) {
+          setIsInitialLoading(false);
+          firstCall = false;
+        }
+      }
+    );
+
+    // Offline fallback
+    const offlineTimer = setTimeout(() => {
+      if (firstCall) {
         setIsOffline(true);
-        if (!silent) setIsInitialLoading(false);
+        setIsInitialLoading(false);
+        firstCall = false;
       }
-    },
-    [friend?.email, myEmail]
-  );
-
-  // ── Start / stop polling ────────────────────────────────────
-  useEffect(() => {
-    if (!isOpen || !friend?.email || !myEmail) return;
-
-    // Full initial load
-    setIsInitialLoading(true);
-    lastMessageCountRef.current = 0;
-    lastTimestampRef.current = 0;
-    setMessages([]);
-    fetchMessages(false, 0); // full load, no since
-
-    // Incremental poll every 5s — pause when tab is in background
-    pollIntervalRef.current = setInterval(() => {
-      if (isOpenRef.current && typeof document !== "undefined" && document.visibilityState === "visible") {
-        fetchMessages(true, lastTimestampRef.current);
-      }
-    }, POLL_INTERVAL_MS);
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && isOpenRef.current) {
-        fetchMessages(true, lastTimestampRef.current);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    }, 10000);
 
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      unsubscribe();
+      clearTimeout(offlineTimer);
     };
-  }, [isOpen, friend?.email, myEmail, fetchMessages]);
+  }, [isOpen, myEmail, friendEmail]);
 
-  // ── Reset on close ──────────────────────────────────────────
+  // ── 2. Listen to friend's typing indicator ─────────────────────────────────
+  useEffect(() => {
+    if (!isOpen || !myEmail || !friendEmail) return;
+
+    const unsubscribe = listenToTyping(myEmail, friendEmail, (typing) => {
+      setIsFriendTyping(typing);
+    });
+
+    return unsubscribe;
+  }, [isOpen, myEmail, friendEmail]);
+
+  // ── 3. Reset on close ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
       setInputText("");
       setShowEmojis(false);
       setMessages([]);
       setIsInitialLoading(true);
-      setIsTyping(false);
-      lastMessageCountRef.current = 0;
+      setIsFriendTyping(false);
+      // Clear typing indicator when closing
+      if (isTypingRef.current && myEmail && friendEmail) {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     } else {
       setTimeout(() => inputRef.current?.focus(), 450);
     }
-  }, [isOpen]);
+  }, [isOpen, myEmail, friendEmail]);
 
-  // ── Scroll to bottom on new messages ───────────────────────
+  // ── 4. Scroll to bottom on new messages ──────────────────────────────────
   useEffect(() => {
     if (messages.length > 0) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages.length]);
 
-  // ── Send message ────────────────────────────────────────────
+  // ── 5. Cleanup typing on unmount ─────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (myEmail && friendEmail && isTypingRef.current) {
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    };
+  }, [myEmail, friendEmail]);
+
+  // ── 6. Handle input + typing indicator ───────────────────────────────────
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setInputText(value);
+      if (!myEmail || !friendEmail) return;
+
+      if (!isTypingRef.current && value.trim().length > 0) {
+        isTypingRef.current = true;
+        setTypingIndicator(myEmail, friendEmail, true).catch(() => {});
+      }
+
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+      if (value.trim().length === 0) {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+        return;
+      }
+
+      typingTimerRef.current = setTimeout(() => {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }, TYPING_DEBOUNCE_MS);
+    },
+    [myEmail, friendEmail]
+  );
+
+  // ── 7. Send message via RTDB ──────────────────────────────────────────────
   const handleSend = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || !friend?.email || isSending) return;
+      if (!trimmed || !friendEmail || !myEmail || isSending) return;
 
-      // Optimistic update — add message locally immediately
+      // Clear typing immediately
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
+      }
+
+      // Optimistic message
       const optimisticId = `pending_${Date.now()}`;
-      const optimisticTs = Date.now();
       const optimisticMsg: Message = {
         id: optimisticId,
-        senderEmail: myEmail,
+        senderId: myEmail,
         text: trimmed,
-        createdAt: optimisticTs,
+        timestamp: Date.now(),
         pending: true,
       };
-
       setMessages((prev) => [...prev, optimisticMsg]);
       setInputText("");
       setShowEmojis(false);
-
-      if (inputRef.current) {
-        inputRef.current.style.height = "42px";
-      }
+      if (inputRef.current) inputRef.current.style.height = "42px";
 
       setIsSending(true);
-
       try {
-        await fetch("/api/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ friendEmail: friend.email, text: trimmed }),
-        });
-        // Immediately fetch since just before we sent, to confirm
-        await fetchMessages(true, optimisticTs - 100);
+        await sendMessage(myEmail, friendEmail, trimmed);
+        // onValue() listener নতুন message automatically দেখাবে, তাই pending remove করি
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } catch {
         setMessages((prev) =>
           prev.map((m) =>
@@ -254,7 +268,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
         inputRef.current?.focus();
       }
     },
-    [friend?.email, isSending, myEmail, fetchMessages]
+    [friendEmail, myEmail, isSending]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -268,6 +282,8 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
 
   const ac = colorFor(friend.name);
   let lastDateLabel = "";
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <AnimatePresence>
@@ -293,9 +309,9 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
             className="fixed inset-x-0 bottom-0 z-[60] flex flex-col bg-white rounded-t-3xl shadow-2xl overflow-hidden"
             style={{ maxHeight: "92dvh", maxWidth: "480px", margin: "0 auto" }}
           >
-            {/* ── Chat Header ─────────────────────────────── */}
+            {/* ── Chat Header ────────────────────────────────── */}
             <div className="flex-shrink-0 px-4 pt-4 pb-3 bg-white border-b border-slate-100">
-              {/* Drag Handle */}
+              {/* Drag handle */}
               <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-3" />
 
               <div className="flex items-center gap-3">
@@ -336,9 +352,9 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                       <WifiOff width={10} height={10} />
                       সংযোগ নেই
                     </p>
-                  ) : isTyping ? (
+                  ) : isFriendTyping ? (
                     <p className="text-[10px] text-teal-600 font-bold flex items-center gap-1">
-                      <span className="flex gap-0.5">
+                      <span className="flex gap-0.5 items-center">
                         <span className="w-1 h-1 rounded-full bg-teal-500 animate-bounce" style={{ animationDelay: "0ms" }} />
                         <span className="w-1 h-1 rounded-full bg-teal-500 animate-bounce" style={{ animationDelay: "150ms" }} />
                         <span className="w-1 h-1 rounded-full bg-teal-500 animate-bounce" style={{ animationDelay: "300ms" }} />
@@ -346,8 +362,17 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                       টাইপ করছে...
                     </p>
                   ) : (
-                    <p className="text-[10px] text-emerald-600 font-bold">অ্যাক্টিভ</p>
+                    <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      অ্যাক্টিভ
+                    </p>
                   )}
+                </div>
+
+                {/* Live badge */}
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-teal-50 border border-teal-200/60 flex-shrink-0">
+                  <Zap width={9} height={9} className="text-teal-600" />
+                  <span className="text-[9px] font-extrabold text-teal-700">Live</span>
                 </div>
 
                 <button
@@ -360,7 +385,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
               </div>
             </div>
 
-            {/* ── Messages Area ────────────────────────────── */}
+            {/* ── Messages Area ─────────────────────────────── */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1 no-scrollbar bg-slate-50/40">
               {isInitialLoading ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
@@ -384,15 +409,15 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
               ) : (
                 <>
                   {messages.map((msg, idx) => {
-                    const isMe = msg.senderEmail === myEmail;
-                    const dateLabel = formatDateLabel(msg.createdAt);
+                    const isMe = msg.senderId === myEmail;
+                    const dateLabel = formatDateLabel(msg.timestamp);
                     const showDateLabel = dateLabel !== lastDateLabel;
                     if (showDateLabel) lastDateLabel = dateLabel;
 
                     const prevMsg = idx > 0 ? messages[idx - 1] : null;
                     const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null;
-                    const isSameAsPrev = prevMsg?.senderEmail === msg.senderEmail;
-                    const isSameAsNext = nextMsg?.senderEmail === msg.senderEmail;
+                    const isSameAsPrev = prevMsg?.senderId === msg.senderId;
+                    const isSameAsNext = nextMsg?.senderId === msg.senderId;
 
                     return (
                       <div key={msg.id}>
@@ -454,7 +479,6 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                               {msg.text}
                             </div>
 
-                            {/* Timestamp */}
                             {!isSameAsNext && (
                               <div
                                 className={`flex items-center gap-1 mt-0.5 px-1 ${
@@ -462,7 +486,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                                 }`}
                               >
                                 <span className="text-[9px] text-slate-400 font-medium">
-                                  {formatTime(msg.createdAt)}
+                                  {formatTime(msg.timestamp)}
                                 </span>
                                 {isMe && (
                                   <CheckCheck
@@ -479,6 +503,30 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                     );
                   })}
 
+                  {/* Friend typing bubble */}
+                  <AnimatePresence>
+                    {isFriendTyping && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="flex items-end gap-2 mt-2"
+                      >
+                        <div className={`h-7 w-7 rounded-full ${ac.bg} flex items-center justify-center shadow-xs flex-shrink-0`}>
+                          <span className={`${ac.text} font-extrabold text-[11px]`}>
+                            {friend.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="bg-white rounded-2xl rounded-bl-sm shadow-sm border border-slate-200/80 px-4 py-3 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   {/* Offline indicator */}
                   {isOffline && (
                     <div className="flex items-center justify-center gap-1.5 py-2 text-[10px] text-rose-400 font-semibold">
@@ -492,7 +540,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
               )}
             </div>
 
-            {/* ── Emoji Quick Picker ───────────────────────── */}
+            {/* ── Emoji Quick Picker ────────────────────────── */}
             <AnimatePresence>
               {showEmojis && (
                 <motion.div
@@ -514,9 +562,8 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
               )}
             </AnimatePresence>
 
-            {/* ── Input Bar ───────────────────────────────── */}
+            {/* ── Input Bar ──────────────────────────────────── */}
             <div className="flex-shrink-0 px-3 py-3 bg-white border-t border-slate-100 flex items-end gap-2">
-              {/* Emoji toggle */}
               <button
                 onClick={() => setShowEmojis((v) => !v)}
                 className={`h-10 w-10 flex items-center justify-center rounded-2xl transition-all flex-shrink-0 cursor-pointer ${
@@ -529,12 +576,11 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                 <Smile width={20} height={20} />
               </button>
 
-              {/* Text input */}
               <div className="flex-1 relative">
                 <textarea
                   ref={inputRef}
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="মেসেজ লিখুন..."
                   rows={1}
@@ -548,7 +594,6 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                 />
               </div>
 
-              {/* Send button */}
               <motion.button
                 whileTap={{ scale: 0.88 }}
                 onClick={() => handleSend(inputText)}

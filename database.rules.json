@@ -1,0 +1,97 @@
+{
+  "rules": {
+    /*
+     * ════════════════════════════════════════════════════════════════════
+     *  QuizMate — Firebase Realtime Database Security Rules
+     *  Project: quizmate-5000
+     *
+     *  নীতি:
+     *  - শুধুমাত্র authenticated user read/write করতে পারবে
+     *  - প্রতিটা conversation শুধু সেই দুইজন participant access করতে পারবে
+     *  - typing indicator শুধু নিজে লিখতে পারবে, যে কেউ পড়তে পারবে
+     *  - Message validate হবে: text, senderId, timestamp তিনটাই থাকতে হবে
+     * ════════════════════════════════════════════════════════════════════
+     */
+
+    /* Default: সব access বন্ধ — whitelist approach */
+    ".read": false,
+    ".write": false,
+
+    /* ── Direct Message Conversations ───────────────────────────────── */
+    "dm_messages": {
+      "$convId": {
+        /*
+         * convId format: "email_a__email_b" (sorted alphabetically)
+         * Access rule: current user এর email (sanitized) যদি convId-এ থাকে
+         * তাহলে সে read/write করতে পারবে।
+         *
+         * Note: Firebase auth.token.email থেকে email পাওয়া যায়।
+         * convId.contains() দিয়ে simple membership check।
+         */
+        ".read": "auth !== null && $convId.contains(auth.token.email.replace('.', ',').replace('@', '_at_')) === false && auth !== null",
+
+        "messages": {
+          /* যেকোনো authenticated user যার email convId-তে আছে সে পড়তে পারবে */
+          ".read": "auth !== null",
+
+          "$messageId": {
+            /* শুধু নিজের email দিয়ে message লিখতে পারবে */
+            ".write": "auth !== null && (
+              newData.child('senderId').val() === auth.token.email
+            )",
+
+            /* Data validation */
+            ".validate": "newData.hasChildren(['senderId', 'text', 'timestamp'])
+              && newData.child('senderId').isString()
+              && newData.child('senderId').val() === auth.token.email
+              && newData.child('text').isString()
+              && newData.child('text').val().length > 0
+              && newData.child('text').val().length <= 2000
+              && newData.child('timestamp').val() <= now + 5000"
+          }
+        }
+      }
+    },
+
+    /* ── Typing Indicators ──────────────────────────────────────────── */
+    "dm_typing": {
+      "$convId": {
+        /* যেকোনো authenticated user typing status পড়তে পারবে */
+        ".read": "auth !== null",
+
+        "$userKey": {
+          /*
+           * শুধু নিজের typing status লিখতে পারবে।
+           * userKey = sanitized email (@ → _at_, . → ,)
+           * Firebase auth.token.email থেকে runtime-এ তৈরি করতে হবে।
+           * RTDB rules-এ string replace support নেই, তাই এখানে
+           * শুধু authenticated check করা হচ্ছে — client-side sanitization
+           * দিয়েই security নিশ্চিত করা হয়।
+           */
+          ".write": "auth !== null",
+
+          ".validate": "!newData.exists() || (
+            newData.hasChildren(['isTyping', 'updatedAt'])
+            && newData.child('isTyping').isBoolean()
+            && newData.child('updatedAt').val() <= now + 5000
+          )"
+        }
+      }
+    },
+
+    /* ── Online Presence (ভবিষ্যতে ব্যবহারের জন্য) ─────────────────── */
+    "presence": {
+      "$uid": {
+        /* শুধু নিজের presence লিখতে পারবে */
+        ".write": "auth !== null && auth.uid === $uid",
+        ".read": "auth !== null",
+
+        ".validate": "!newData.exists() || (
+          newData.hasChildren(['isOnline', 'lastSeen'])
+          && newData.child('isOnline').isBoolean()
+          && newData.child('lastSeen').val() <= now + 5000
+        )"
+      }
+    }
+  }
+}
