@@ -318,11 +318,11 @@ export default function DashboardPage() {
         {/* ===== SCROLLABLE MAIN CONTENT AREA ===== */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3.5 pb-8 space-y-4.5 no-scrollbar">
 
-          {/* 1. HERO PROMOTIONAL BANNER CAROUSEL */}
-          <BannerCarousel slides={bannerList} />
-
-          {/* 2. QUICK ACTIONS SHORTCUT DOCK (Includes Live Quiz Trigger & Popup) */}
+          {/* 1. QUICK ACTIONS SHORTCUT DOCK (Includes Live Quiz Trigger & Popup) */}
           <QuickActionsDock liveQuiz={liveQuiz} />
+
+          {/* 2. HERO PROMOTIONAL BANNER CAROUSEL */}
+          <BannerCarousel slides={bannerList} />
 
           {/* 3. CURRICULUM HUB (ALL SUBJECTS GRID WITH INTEGRATED PROGRESS BARS) */}
           <SubjectGridSection subjectsList={subjectsList} isLoading={isSubjectsLoading} />
