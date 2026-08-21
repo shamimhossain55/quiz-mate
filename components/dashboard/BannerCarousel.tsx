@@ -68,7 +68,7 @@ export default function BannerCarousel({ slides = [] }: BannerCarouselProps) {
 
   return (
     <div
-      className="relative group rounded-3xl overflow-hidden shadow-[0_16px_36px_-8px_rgba(13,148,136,0.35)] border border-white/25 transition-all duration-300"
+      className="relative group rounded-2xl overflow-hidden shadow-[0_8px_24px_-6px_rgba(13,148,136,0.30)] border border-white/25 transition-all duration-300"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
@@ -93,8 +93,8 @@ export default function BannerCarousel({ slides = [] }: BannerCarouselProps) {
       )}
 
       {/* Decorative Orbs */}
-      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white/10 blur-xl pointer-events-none" />
-      <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-teal-300/20 blur-lg pointer-events-none" />
+      <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-white/10 blur-xl pointer-events-none" />
+      <div className="absolute -bottom-6 -left-6 w-20 h-20 rounded-full bg-teal-300/20 blur-lg pointer-events-none" />
 
       {/* Slide Navigation Arrows (visible on hover or desktop) */}
       {bannerList.length > 1 && (
@@ -117,42 +117,41 @@ export default function BannerCarousel({ slides = [] }: BannerCarouselProps) {
       )}
 
       {/* Slide Main Content */}
-      <div className="relative z-10 p-4 sm:p-5 flex flex-col justify-between min-h-[170px]">
+      <div className="relative z-10 px-4 py-3 flex flex-col gap-2">
         {/* Top badge row */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-white/20 text-[9.5px] font-black text-white shadow-2xs">
-            <Sparkles width={11} height={11} className="text-amber-300 fill-amber-300 animate-pulse" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/20 text-[9px] font-black text-white">
+            <Sparkles width={9} height={9} className="text-amber-300 fill-amber-300 animate-pulse" />
             <span>{currentBanner.badge || "PROMO"}</span>
           </div>
-
           <span className="text-[9px] font-extrabold text-teal-100/90 bg-black/30 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/15">
             {currentIndex + 1} / {bannerList.length}
           </span>
         </div>
 
         {/* Title and Subtitle */}
-        <div className="mb-3">
-          <h3 className="text-xl sm:text-2xl font-black text-white leading-tight tracking-tight drop-shadow-sm">
+        <div>
+          <h3 className="text-base font-black text-white leading-tight tracking-tight drop-shadow-sm">
             {currentBanner.title}
           </h3>
-          <p className="text-xs text-teal-100/90 font-medium mt-1 leading-snug line-clamp-2">
+          <p className="text-[10px] text-teal-100/90 font-medium mt-0.5 leading-snug line-clamp-1">
             {currentBanner.subtitle}
           </p>
         </div>
 
         {/* Bottom CTA Row */}
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex items-center justify-between pb-1">
           <button
             onClick={() => router.push(currentBanner.linkUrl || "/quiz/setup")}
-            className="h-10 px-4 rounded-xl bg-white text-slate-900 font-extrabold text-xs shadow-lg hover:bg-amber-300 active:scale-95 transition-all duration-200 flex items-center gap-1.5 group/btn"
+            className="h-8 px-3 rounded-lg bg-white text-slate-900 font-extrabold text-[11px] shadow-md hover:bg-amber-300 active:scale-95 transition-all duration-200 flex items-center gap-1 group/btn"
           >
             <span>{currentBanner.ctaText || "এক্সপ্লোর করুন 🚀"}</span>
-            <Play width={13} height={13} fill="currentColor" className="text-slate-900 group-hover/btn:translate-x-0.5 transition-transform" />
+            <Play width={11} height={11} fill="currentColor" className="text-slate-900 group-hover/btn:translate-x-0.5 transition-transform" />
           </button>
 
-          {/* XP Progress Indicator inside Banner */}
-          <div className="flex items-center gap-1 text-[10px] text-teal-100 font-bold bg-white/10 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-white/15">
-            <Zap width={12} height={12} className="text-amber-300 fill-amber-300" />
+          {/* XP Bonus */}
+          <div className="flex items-center gap-1 text-[9px] text-teal-100 font-bold bg-white/10 backdrop-blur-md px-2 py-1 rounded-lg border border-white/15">
+            <Zap width={10} height={10} className="text-amber-300 fill-amber-300" />
             <span>+১২৫ XP বোনাস</span>
           </div>
         </div>
