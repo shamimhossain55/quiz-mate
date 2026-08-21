@@ -6,7 +6,6 @@ import { useSession } from "next-auth/react";
 import BottomNav from "@/components/layout/BottomNav";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import QuickActionsDock from "@/components/dashboard/QuickActionsDock";
-import DailyMissionsCard from "@/components/dashboard/DailyMissionsCard";
 import BannerCarousel from "@/components/dashboard/BannerCarousel";
 import SubjectGridSection, { SubjectItem } from "@/components/dashboard/SubjectGridSection";
 import { getSubjects } from "@/lib/firestore/subjects";
@@ -318,8 +317,19 @@ export default function DashboardPage() {
         {/* ===== SCROLLABLE MAIN CONTENT AREA ===== */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3.5 pb-8 space-y-4.5 no-scrollbar">
 
-          {/* 1. QUICK ACTIONS SHORTCUT DOCK (Includes Live Quiz Trigger & Popup) */}
-          <QuickActionsDock liveQuiz={liveQuiz} />
+          {/* 1. QUICK ACTIONS SHORTCUT DOCK (Includes Live Quiz Trigger & Popup & Missions Modal) */}
+          <QuickActionsDock
+            liveQuiz={liveQuiz}
+            missionData={{
+              missions: dailyMissionsList,
+              todayExamsPlayed,
+              todayCorrectAnswers,
+              todayHighestScore,
+              userEmail: session?.user?.email,
+              onPointsClaimed: handlePointsClaimed,
+              masterBonusXP: missionsSettings?.allClearBonusXP,
+            }}
+          />
 
           {/* 2. HERO PROMOTIONAL BANNER CAROUSEL */}
           <BannerCarousel slides={bannerList} />
@@ -327,16 +337,7 @@ export default function DashboardPage() {
           {/* 3. CURRICULUM HUB (ALL SUBJECTS GRID WITH INTEGRATED PROGRESS BARS) */}
           <SubjectGridSection subjectsList={subjectsList} isLoading={isSubjectsLoading} />
 
-          {/* 4. GAMIFIED DAILY MISSIONS & REWARDS */}
-          <DailyMissionsCard
-            todayExamsPlayed={todayExamsPlayed}
-            todayCorrectAnswers={todayCorrectAnswers}
-            todayHighestScore={todayHighestScore}
-            userEmail={session?.user?.email}
-            onPointsClaimed={handlePointsClaimed}
-            configuredMissions={dailyMissionsList}
-            allClearBonusXP={missionsSettings?.allClearBonusXP}
-          />
+          {/* Daily Missions are now accessible via the Mission button in QuickActionsDock */}
 
         </div>
       </div>
