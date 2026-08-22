@@ -40,5 +40,11 @@ export async function GET() {
     return NextResponse.json({ student: newStudentData });
   }
 
-  return NextResponse.json({ student: studentSnap.data() });
+  const rawData = studentSnap.data() || {};
+  const profileComplete =
+    rawData.profileComplete !== undefined
+      ? rawData.profileComplete
+      : Boolean(rawData.classId || rawData.totalExam > 0 || rawData.point > 0);
+
+  return NextResponse.json({ student: { ...rawData, profileComplete } });
 }

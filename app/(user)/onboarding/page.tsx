@@ -156,7 +156,11 @@ export default function OnboardingPage() {
           if (res.ok) {
             const { student } = await res.json();
             if (student) {
-              if (student.profileComplete) {
+              if (
+                student.profileComplete === true ||
+                (student.classId && student.profileComplete !== false) ||
+                student.totalExam > 0
+              ) {
                 router.replace("/dashboard");
                 return;
               }

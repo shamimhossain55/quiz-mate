@@ -60,14 +60,14 @@ export default function LoginPage() {
         email,
         password,
         redirect: false,
-        callbackUrl: "/onboarding",
+        callbackUrl: "/dashboard",
       });
 
       if (res?.error) {
         setError("ইমেইল বা পাসওয়ার্ড সঠিক নয়");
         setLoading(false);
       } else {
-        router.replace("/onboarding");
+        router.replace("/dashboard");
       }
     } catch (err) {
       console.error(err);
@@ -77,7 +77,7 @@ export default function LoginPage() {
   }
 
   function handleGoogleLogin() {
-    signIn("google", { callbackUrl: "/onboarding" });
+    signIn("google", { callbackUrl: "/dashboard" });
   }
 
   return (

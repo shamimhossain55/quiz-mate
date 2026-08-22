@@ -145,7 +145,13 @@ export default function DashboardPage() {
             setUserAvatar(null);
           }
 
-          if (currentStudentProfile.profileComplete === false) {
+          // Only redirect to onboarding if user is truly brand new and has not configured their class
+          const isBrandNewUser =
+            currentStudentProfile.profileComplete === false &&
+            !currentStudentProfile.classId &&
+            !currentStudentProfile.totalExam;
+
+          if (isBrandNewUser) {
             router.replace("/onboarding");
             return;
           }

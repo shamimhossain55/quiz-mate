@@ -26,9 +26,10 @@ export async function GET() {
       customUidLower: customUid.toLowerCase(),
       avatarUrl: session.user.image || null,
       bio: "কুইজ মেটে স্বাগতম! 🚀",
-      classId: "class6",
-      className: "ষষ্ঠ শ্রেণী (Class 6)",
-      group: "all",
+      classId: null,
+      className: null,
+      group: null,
+      profileComplete: false,
       point: 0,
       totalExam: 0,
       streak: 1,
@@ -44,6 +45,10 @@ export async function GET() {
   } else {
     studentData = studentSnap.data() || {};
     let isUpdated = false;
+
+    if (studentData.profileComplete === undefined) {
+      studentData.profileComplete = Boolean(studentData.classId || studentData.totalExam > 0 || studentData.point > 0);
+    }
 
     // Check if customUid is missing or invalid 6-digit number format
     if (!studentData.customUid || !/^\d{6}$/.test(String(studentData.customUid))) {
