@@ -143,14 +143,19 @@ export async function getChaptersBySubject(subjectId: string): Promise<AdminChap
         { id: `${subjectId}_ch3`, name: "অধ্যায় ৩: অনুশীলন ও সমাধান", subjectId, chapterNo: 3, order: 3 },
       ];
     }
-    return querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      name: docSnap.data().name || docSnap.data().title || docSnap.id,
-      subjectId: docSnap.data().subjectId || subjectId,
-      chapterNo: docSnap.data().chapterNo || 1,
-      order: docSnap.data().order || 1,
-      sectionName: docSnap.data().sectionName || undefined,
-    }));
+    const docs = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      const numNo = Number(data.chapterNo ?? data.order) || 1;
+      return {
+        id: docSnap.id,
+        name: data.name || data.title || docSnap.id,
+        subjectId: data.subjectId || subjectId,
+        chapterNo: numNo,
+        order: Number(data.order ?? numNo) || 1,
+        sectionName: data.sectionName || undefined,
+      };
+    });
+    return docs.sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0));
   } catch (err) {
     console.error("Error fetching chapters:", err);
     return [
@@ -164,14 +169,23 @@ export async function getAllChapters(): Promise<AdminChapter[]> {
   try {
     const querySnapshot = await getDocs(collection(db, "chapters"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      name: docSnap.data().name || docSnap.data().title || docSnap.id,
-      subjectId: docSnap.data().subjectId || "",
-      chapterNo: docSnap.data().chapterNo || 1,
-      order: docSnap.data().order || 1,
-      sectionName: docSnap.data().sectionName || undefined,
-    }));
+    const docs = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      const numNo = Number(data.chapterNo ?? data.order) || 1;
+      return {
+        id: docSnap.id,
+        name: data.name || data.title || docSnap.id,
+        subjectId: data.subjectId || "",
+        chapterNo: numNo,
+        order: Number(data.order ?? numNo) || 1,
+        sectionName: data.sectionName || undefined,
+      };
+    });
+    return docs.sort((a, b) => {
+      const diff = (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0);
+      if (diff !== 0) return diff;
+      return (a.name || "").localeCompare(b.name || "", "bn", { numeric: true });
+    });
   } catch (err) {
     console.error("Error fetching all chapters:", err);
     return [];

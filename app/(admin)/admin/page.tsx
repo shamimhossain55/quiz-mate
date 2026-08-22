@@ -470,7 +470,7 @@ export default function AdminPage() {
         setQuizzes(firestoreQuizzes);
         setQuestions(firestoreQuestions);
         setBanners(firestoreBanners);
-        setAllChapters(firestoreChapters);
+        setAllChapters([...firestoreChapters].sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0)));
         setMissions(firestoreMissions);
         setMissionSettings(firestoreMissionSettings);
         setActivityLogs(firestoreLogs);
@@ -1202,12 +1202,20 @@ export default function AdminPage() {
       };
       if (editingChapter) {
         await updateChapter(editingChapter.id, payload);
-        setAllChapters(allChapters.map((c) => (c.id === editingChapter.id ? { ...c, ...payload } : c)));
+        setAllChapters(
+          allChapters
+            .map((c) => (c.id === editingChapter.id ? { ...c, ...payload } : c))
+            .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
+        );
         logAction("update", "chapter", payload.name);
         showToast("অধ্যায় আপডেট হয়েছে! ✏️");
       } else {
         const id = await addChapter(payload);
-        setAllChapters([...allChapters, { ...payload, id }]);
+        setAllChapters(
+          [...allChapters, { ...payload, id }].sort(
+            (a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0)
+          )
+        );
         logAction("create", "chapter", payload.name);
         showToast("নতুন অধ্যায় যোগ হয়েছে! 📚");
       }
@@ -2017,9 +2025,12 @@ export default function AdminPage() {
                         {(questionSubjectFilter === "all"
                           ? allChapters
                           : allChapters.filter((c) => c.subjectId === questionSubjectFilter)
-                        ).map((ch) => (
-                          <option key={ch.id} value={ch.id}>অধ্যায় {ch.chapterNo}: {ch.name}</option>
-                        ))}
+                        )
+                          .slice()
+                          .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
+                          .map((ch) => (
+                            <option key={ch.id} value={ch.id}>অধ্যায় {ch.chapterNo}: {ch.name}</option>
+                          ))}
                       </select>
                     </div>
                   </div>
@@ -3393,6 +3404,8 @@ export default function AdminPage() {
                     <option value="">সম্পূর্ণ বিষয় / সকল অধ্যায়</option>
                     {allChapters
                       .filter((ch) => quizForm.subjectId && ch.subjectId === quizForm.subjectId)
+                      .slice()
+                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}
@@ -3779,6 +3792,8 @@ export default function AdminPage() {
                     <option value="">অধ্যায় সিলেক্ট করুন (অপশনাল)</option>
                     {allChapters
                       .filter((c) => bulkMeta.subjectId && c.subjectId === bulkMeta.subjectId)
+                      .slice()
+                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}
@@ -3895,6 +3910,8 @@ export default function AdminPage() {
                     <option value="">অধ্যায় নির্বাচন করুন (ঐচ্ছিক)</option>
                     {allChapters
                       .filter((c) => newQuestion.subjectId && c.subjectId === newQuestion.subjectId)
+                      .slice()
+                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}
@@ -4041,6 +4058,8 @@ export default function AdminPage() {
                     <option value="">অধ্যায় সিলেক্ট করুন (ঐচ্ছিক)</option>
                     {allChapters
                       .filter((c) => editingQuestion.subjectId && c.subjectId === editingQuestion.subjectId)
+                      .slice()
+                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
                       .map((ch) => (
                         <option key={ch.id} value={ch.id}>
                           অধ্যায় {ch.chapterNo}: {ch.name}
