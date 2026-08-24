@@ -109,6 +109,7 @@ export interface Student {
   point: number;
   totalExam: number;
   streak?: number;
+  lastStreakDate?: string | null;
   level?: number;
   avatarUrl?: string | null;
   bio?: string | null;

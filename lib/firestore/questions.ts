@@ -88,4 +88,69 @@ function parseQuestionDoc(docSnap: any): Question {
     explanation: d.explanation || "",
     order: d.order || 1,
   } as Question;
+}
+
+const FALLBACK_BATTLE_QUESTIONS: Record<string, Array<{ questionText: string; options: string[]; correctAnswer: number; explanation: string }>> = {
+  general: [
+    {
+      questionText: "বাংলাদেশের জাতীয় কবি কে?",
+      options: ["রবীন্দ্রনাথ ঠাকুর", "কাজী নজরুল ইসলাম", "জসীম উদ্দীন", "জীবনানন্দ দাশ"],
+      correctAnswer: 1,
+      explanation: "কাজী নজরুল ইসলাম বাংলাদেশের জাতীয় কবি।",
+    },
+    {
+      questionText: "সূর্যোদয়ের দেশ কোনটি?",
+      options: ["জাপান", "চীন", "নরওয়ে", "কোরিয়া"],
+      correctAnswer: 0,
+      explanation: "জাপানকে সূর্যোদয়ের দেশ বলা হয়।",
+    },
+    {
+      questionText: "পানির রাসায়নিক সংকেত কোনটি?",
+      options: ["CO2", "H2O", "NaCl", "O2"],
+      correctAnswer: 1,
+      explanation: "পানির রাসায়নিক সংকেত H2O।",
+    },
+    {
+      questionText: "কম্পিউটারের মস্তিষ্ক কাকে বলা হয়?",
+      options: ["RAM", "ROM", "CPU", "Hard Disk"],
+      correctAnswer: 2,
+      explanation: "CPU (Central Processing Unit) কে কম্পিউটারের ব্রেইন বা মস্তিষ্ক বলা হয়।",
+    },
+    {
+      questionText: "আন্তর্জাতিক মাতৃভাষা দিবস কত তারিখে পালিত হয়?",
+      options: ["২৬ মার্চ", "২১ ফেব্রুয়ারি", "১৬ ডিসেম্বর", "৭ মার্চ"],
+      correctAnswer: 1,
+      explanation: "২১ ফেব্রুয়ারি আন্তর্জাতিক মাতৃভাষা দিবস হিসেবে পালিত হয়।",
+    },
+  ],
+};
+
+export async function getBattleQuestions(
+  subjectId?: string,
+  count = 5
+): Promise<Array<{ id: string; questionText: string; options: string[]; correctAnswer: number; explanation?: string }>> {
+  let questions: Question[] = [];
+  if (subjectId) {
+    questions = await getQuestions("", subjectId);
+  }
+
+  if (questions.length < count) {
+    const fallbacks = FALLBACK_BATTLE_QUESTIONS[subjectId || "general"] || FALLBACK_BATTLE_QUESTIONS.general;
+    return fallbacks.slice(0, count).map((q, idx) => ({
+      id: `fb_q_${idx + 1}`,
+      questionText: q.questionText,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      explanation: q.explanation,
+    }));
+  }
+
+  const shuffled = [...questions].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count).map((q) => ({
+    id: q.id,
+    questionText: q.question,
+    options: q.options,
+    correctAnswer: q.correctAnswer,
+    explanation: q.explanation,
+  }));
 }

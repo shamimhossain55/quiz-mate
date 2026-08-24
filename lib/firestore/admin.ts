@@ -28,6 +28,37 @@ export type AdminUser = {
   avatarUrl?: string | null;
 };
 
+// ===== CACHING LAYER =====
+const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+let classesCache: { data: AdminClass[]; timestamp: number } | null = null;
+let chaptersCache: { data: AdminChapter[]; timestamp: number } | null = null;
+let studentsCache: { data: AdminUser[]; timestamp: number } | null = null;
+let subjectsCache: { data: AdminSubject[]; timestamp: number } | null = null;
+let quizzesCache: { data: AdminQuiz[]; timestamp: number } | null = null;
+let questionsCache: { data: AdminQuestion[]; timestamp: number } | null = null;
+let bannersCache: { data: BannerSlide[]; timestamp: number } | null = null;
+
+export function invalidateAdminCache(
+  key?: "classes" | "chapters" | "students" | "subjects" | "quizzes" | "questions" | "banners"
+) {
+  if (!key) {
+    classesCache = null;
+    chaptersCache = null;
+    studentsCache = null;
+    subjectsCache = null;
+    quizzesCache = null;
+    questionsCache = null;
+    bannersCache = null;
+    return;
+  }
+  if (key === "classes") classesCache = null;
+  if (key === "chapters") chaptersCache = null;
+  if (key === "students") studentsCache = null;
+  if (key === "subjects") subjectsCache = null;
+  if (key === "quizzes") quizzesCache = null;
+  if (key === "questions") questionsCache = null;
+  if (key === "banners") bannersCache = null;
+}
 
 export type AdminClass = {
   id: string;
@@ -103,23 +134,30 @@ export type AdminQuestion = {
 };
 
 // ===== CLASS & CHAPTER OPERATIONS =====
-export async function getAllClasses(): Promise<AdminClass[]> {
+export async function getAllClasses(force = false): Promise<AdminClass[]> {
+  if (!force && classesCache && Date.now() - classesCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return classesCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "classes"));
     if (querySnapshot.empty) {
-      return [
+      const fallback = [
         { id: "class6", name: "ষষ্ঠ শ্রেণী (Class 6)", order: 1 },
         { id: "class7", name: "সপ্তম শ্রেণী (Class 7)", order: 2 },
         { id: "class8", name: "অষ্টম শ্রেণী (Class 8)", order: 3 },
         { id: "class9_10", name: "নবম-দশম শ্রেণী (Class 9-10 / SSC)", order: 4 },
         { id: "class11_12", name: "একাদশ-দ্বাদশ শ্রেণী (Class 11-12 / HSC)", order: 5 },
       ];
+      classesCache = { data: fallback, timestamp: Date.now() };
+      return fallback;
     }
-    return querySnapshot.docs.map((docSnap) => ({
+    const list = querySnapshot.docs.map((docSnap) => ({
       id: docSnap.id,
       name: docSnap.data().name || docSnap.id,
       order: docSnap.data().order || 1,
     }));
+    classesCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (err) {
     console.error("Error fetching classes:", err);
     return [
@@ -134,6 +172,11 @@ export async function getAllClasses(): Promise<AdminClass[]> {
 
 export async function getChaptersBySubject(subjectId: string): Promise<AdminChapter[]> {
   try {
+    if (chaptersCache && Date.now() - chaptersCache.timestamp < ADMIN_CACHE_TTL_MS) {
+      const filtered = chaptersCache.data.filter((c) => c.subjectId === subjectId);
+      if (filtered.length > 0) return filtered;
+    }
+
     const q = query(collection(db, "chapters"), where("subjectId", "==", subjectId));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) {
@@ -165,7 +208,10 @@ export async function getChaptersBySubject(subjectId: string): Promise<AdminChap
   }
 }
 
-export async function getAllChapters(): Promise<AdminChapter[]> {
+export async function getAllChapters(force = false): Promise<AdminChapter[]> {
+  if (!force && chaptersCache && Date.now() - chaptersCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return chaptersCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "chapters"));
     if (querySnapshot.empty) return [];
@@ -181,11 +227,13 @@ export async function getAllChapters(): Promise<AdminChapter[]> {
         sectionName: data.sectionName || undefined,
       };
     });
-    return docs.sort((a, b) => {
+    const sorted = docs.sort((a, b) => {
       const diff = (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0);
       if (diff !== 0) return diff;
       return (a.name || "").localeCompare(b.name || "", "bn", { numeric: true });
     });
+    chaptersCache = { data: sorted, timestamp: Date.now() };
+    return sorted;
   } catch (err) {
     console.error("Error fetching all chapters:", err);
     return [];
@@ -205,6 +253,7 @@ export async function addChapter(chapter: Omit<AdminChapter, "id">): Promise<str
     ...cleanChapter,
     createdAt: new Date(),
   });
+  invalidateAdminCache("chapters");
   return docRef.id;
 }
 
@@ -218,18 +267,23 @@ export async function updateChapter(id: string, chapter: Partial<AdminChapter>):
     }
   });
   await updateDoc(cRef, cleanChapter);
+  invalidateAdminCache("chapters");
 }
 
 export async function deleteChapter(id: string): Promise<void> {
   await deleteDoc(doc(db, "chapters", id));
+  invalidateAdminCache("chapters");
 }
 
 // ===== USER OPERATIONS =====
-export async function getAllStudents(): Promise<AdminUser[]> {
+export async function getAllStudents(force = false): Promise<AdminUser[]> {
+  if (!force && studentsCache && Date.now() - studentsCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return studentsCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "students"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => {
+    const list = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       return {
         id: docSnap.id,
@@ -243,6 +297,8 @@ export async function getAllStudents(): Promise<AdminUser[]> {
         avatarUrl: data.avatarUrl || null,
       };
     });
+    studentsCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (err) {
     console.error("Error fetching students:", err);
     return [];
@@ -255,12 +311,14 @@ export async function addStudent(user: Omit<AdminUser, "id">): Promise<string> {
     ...user,
     createdAt: new Date(),
   });
+  invalidateAdminCache("students");
   return docRef.id;
 }
 
 export async function updateStudentStatus(id: string, status: "active" | "inactive" | "banned") {
   const userRef = doc(db, "students", id);
   await updateDoc(userRef, { status });
+  invalidateAdminCache("students");
 }
 
 export async function updateStudentRole(
@@ -278,18 +336,23 @@ export async function updateStudentRole(
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || " Failed to update user role");
   }
+  invalidateAdminCache("students");
 }
 
 export async function deleteStudent(id: string) {
   await deleteDoc(doc(db, "students", id));
+  invalidateAdminCache("students");
 }
 
 // ===== SUBJECT OPERATIONS =====
-export async function getAllSubjects(): Promise<AdminSubject[]> {
+export async function getAllSubjects(force = false): Promise<AdminSubject[]> {
+  if (!force && subjectsCache && Date.now() - subjectsCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return subjectsCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "subjects"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => ({
+    const list = querySnapshot.docs.map((docSnap) => ({
       id: docSnap.id,
       name: docSnap.data().name || docSnap.id,
       slug: docSnap.data().slug || docSnap.id,
@@ -301,6 +364,8 @@ export async function getAllSubjects(): Promise<AdminSubject[]> {
       imageUrl: docSnap.data().imageUrl || undefined,
       sections: docSnap.data().sections || undefined,
     }));
+    subjectsCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (err) {
     console.error("Error fetching subjects:", err);
     return [];
@@ -310,6 +375,7 @@ export async function getAllSubjects(): Promise<AdminSubject[]> {
 import { clearSubjectCache } from "@/lib/firestore/subjects";
 
 function notifySubjectsUpdated() {
+  invalidateAdminCache("subjects");
   clearSubjectCache();
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("qm_subjects_updated"));
@@ -353,11 +419,14 @@ export async function deleteSubject(id: string): Promise<void> {
 
 
 // ===== QUIZ OPERATIONS =====
-export async function getAllQuizzes(): Promise<AdminQuiz[]> {
+export async function getAllQuizzes(force = false): Promise<AdminQuiz[]> {
+  if (!force && quizzesCache && Date.now() - quizzesCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return quizzesCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "quizzes"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => {
+    const list = querySnapshot.docs.map((docSnap) => {
       const d = docSnap.data();
       const questionsCount = d.questions?.length || d.totalQuestions || d.questionsCount || 0;
       return {
@@ -385,6 +454,8 @@ export async function getAllQuizzes(): Promise<AdminQuiz[]> {
         updatedAt: d.updatedAt,
       };
     });
+    quizzesCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (err) {
     console.error("Error fetching quizzes:", err);
     return [];
@@ -426,6 +497,7 @@ export async function addQuiz(quiz: Omit<AdminQuiz, "id">): Promise<string> {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
+  invalidateAdminCache("quizzes");
   return docRef.id;
 }
 
@@ -459,6 +531,7 @@ export async function updateQuizDoc(id: string, quiz: Partial<AdminQuiz>): Promi
   }
   cleanData.updatedAt = new Date();
   await updateDoc(docRef, cleanData);
+  invalidateAdminCache("quizzes");
 }
 
 export async function toggleQuizLiveStatus(id: string, isLive: boolean, durationMinutes = 15): Promise<void> {
@@ -481,18 +554,23 @@ export async function toggleQuizLiveStatus(id: string, isLive: boolean, duration
       updatedAt: new Date(),
     });
   }
+  invalidateAdminCache("quizzes");
 }
 
 export async function deleteQuizDoc(id: string) {
   await deleteDoc(doc(db, "quizzes", id));
+  invalidateAdminCache("quizzes");
 }
 
 // ===== QUESTION OPERATIONS (SINGLE & BULK JSON) =====
-export async function getAllQuestions(): Promise<AdminQuestion[]> {
+export async function getAllQuestions(force = false): Promise<AdminQuestion[]> {
+  if (!force && questionsCache && Date.now() - questionsCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return questionsCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "questions"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => ({
+    const list = querySnapshot.docs.map((docSnap) => ({
       id: docSnap.id,
       quizId: docSnap.data().quizId,
       classId: docSnap.data().classId,
@@ -503,6 +581,8 @@ export async function getAllQuestions(): Promise<AdminQuestion[]> {
       correctAnswer: docSnap.data().correctAnswer ?? 0,
       explanation: docSnap.data().explanation || "",
     }));
+    questionsCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (err) {
     console.error("Error fetching questions:", err);
     return [];
@@ -522,6 +602,7 @@ export async function addQuestion(q: Omit<AdminQuestion, "id">): Promise<string>
     ...cleanData,
     createdAt: new Date(),
   });
+  invalidateAdminCache("questions");
   return docRef.id;
 }
 
@@ -535,10 +616,12 @@ export async function updateQuestion(id: string, q: Partial<AdminQuestion>): Pro
     }
   });
   await updateDoc(qRef, cleanData);
+  invalidateAdminCache("questions");
 }
 
 export async function deleteQuestion(id: string): Promise<void> {
   await deleteDoc(doc(db, "questions", id));
+  invalidateAdminCache("questions");
 }
 
 export async function addBulkQuestions(
@@ -565,15 +648,19 @@ export async function addBulkQuestions(
   }
 
   await batch.commit();
+  invalidateAdminCache("questions");
   return count;
 }
 
 // ===== BANNER CAROUSEL OPERATIONS =====
-export async function getAllBanners(): Promise<BannerSlide[]> {
+export async function getAllBanners(force = false): Promise<BannerSlide[]> {
+  if (!force && bannersCache && Date.now() - bannersCache.timestamp < ADMIN_CACHE_TTL_MS) {
+    return bannersCache.data;
+  }
   try {
     const querySnapshot = await getDocs(collection(db, "banners"));
     if (querySnapshot.empty) return [];
-    return querySnapshot.docs.map((docSnap) => ({
+    const list = querySnapshot.docs.map((docSnap) => ({
       id: docSnap.id,
       title: docSnap.data().title || "",
       subtitle: docSnap.data().subtitle || "",
@@ -585,6 +672,8 @@ export async function getAllBanners(): Promise<BannerSlide[]> {
       bgGradient: docSnap.data().bgGradient || "linear-gradient(135deg, #0F766E 0%, #0D9488 100%)",
       order: docSnap.data().order || 1,
     }));
+    bannersCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (err) {
     console.error("Error fetching banners:", err);
     return [];
@@ -604,6 +693,7 @@ export async function addBannerDoc(banner: Omit<BannerSlide, "id">): Promise<str
     ...cleanBanner,
     createdAt: new Date(),
   });
+  invalidateAdminCache("banners");
   return docRef.id;
 }
 
@@ -617,10 +707,13 @@ export async function updateBannerDoc(id: string, banner: Partial<BannerSlide>):
     }
   });
   await updateDoc(bRef, cleanBanner);
+  invalidateAdminCache("banners");
 }
 
 export async function deleteBannerDoc(id: string): Promise<void> {
   await deleteDoc(doc(db, "banners", id));
+  invalidateAdminCache("banners");
 }
+
 
 

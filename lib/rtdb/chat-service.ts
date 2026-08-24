@@ -53,37 +53,41 @@ export type TypingPayload = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/**
- * Deterministic conversation ID from two emails.
- * email-এর "@" এবং "." replace করতে হয় কারণ RTDB path-এ
- * এই characters invalid হয়।
- */
-export function buildConvId(emailA: string, emailB: string): string {
-  return [emailA.toLowerCase(), emailB.toLowerCase()]
-    .sort()
-    .join("__");
+export function sanitizeEmail(email: string): string {
+  if (!email) return "unknown";
+  return email
+    .toLowerCase()
+    .trim()
+    .replace(/\./g, ",")
+    .replace(/@/g, "_at_")
+    .replace(/[\$#\[\]\/]/g, "_");
 }
 
 /**
- * RTDB path-এ email সরাসরি key হিসেবে ব্যবহার করা যায় না
- * কারণ ".", "#", "$", "[", "]" invalid।
- * এই function সেগুলো replace করে।
+ * Deterministic conversation ID from two emails.
+ * Emails are sanitized to ensure no '.', '@', or illegal characters
+ * are present in the RTDB path.
  */
-export function sanitizeEmail(email: string): string {
-  return email.toLowerCase().replace(/\./g, ",").replace(/@/g, "_at_");
+export function buildConvId(emailA: string, emailB: string): string {
+  const sanitizedA = sanitizeEmail(emailA);
+  const sanitizedB = sanitizeEmail(emailB);
+  return [sanitizedA, sanitizedB].sort().join("__");
 }
 
 // ─── Refs ────────────────────────────────────────────────────────────────────
 
-function messagesRef(convId: string): DatabaseReference {
+function messagesRef(convId: string): DatabaseReference | null {
+  if (!rtdb || !convId) return null;
   return ref(rtdb, `dm_messages/${convId}/messages`);
 }
 
-function typingRef(convId: string, email: string): DatabaseReference {
+function typingRef(convId: string, email: string): DatabaseReference | null {
+  if (!rtdb || !convId || !email) return null;
   return ref(rtdb, `dm_typing/${convId}/${sanitizeEmail(email)}`);
 }
 
-function typingConvRef(convId: string): DatabaseReference {
+function typingConvRef(convId: string): DatabaseReference | null {
+  if (!rtdb || !convId) return null;
   return ref(rtdb, `dm_typing/${convId}`);
 }
 
@@ -102,8 +106,10 @@ export async function sendMessage(
   friendEmail: string,
   text: string
 ): Promise<string> {
+  if (!myEmail || !friendEmail || !text.trim()) return "";
   const convId = buildConvId(myEmail, friendEmail);
   const msgRef = messagesRef(convId);
+  if (!msgRef) return "";
 
   const newRef = push(msgRef);
   await set(newRef, {
@@ -112,7 +118,7 @@ export async function sendMessage(
     timestamp: serverTimestamp(), // RTDB server-side timestamp
   });
 
-  return newRef.key!;
+  return newRef.key || "";
 }
 
 // ─── Listen to Messages ───────────────────────────────────────────────────────
@@ -129,9 +135,13 @@ export function listenToMessages(
   limit: number = 80,
   callback: (messages: RtdbMessage[]) => void
 ): () => void {
+  if (!myEmail || !friendEmail) return () => {};
   const convId = buildConvId(myEmail, friendEmail);
+  const msgRef = messagesRef(convId);
+  if (!msgRef) return () => {};
+
   const q = query(
-    messagesRef(convId),
+    msgRef,
     orderByChild("timestamp"),
     limitToLast(limit)
   );
@@ -176,15 +186,21 @@ export async function setTypingIndicator(
   friendEmail: string,
   isTyping: boolean
 ): Promise<void> {
+  if (!myEmail || !friendEmail) return;
   const convId = buildConvId(myEmail, friendEmail);
   const tRef = typingRef(convId, myEmail);
+  if (!tRef) return;
 
-  if (isTyping) {
-    await set(tRef, { isTyping: true, updatedAt: serverTimestamp() });
-    // ব্রাউজার বন্ধ হলে typing indicator auto remove করবে
-    onDisconnect(tRef).remove();
-  } else {
-    await remove(tRef);
+  try {
+    if (isTyping) {
+      await set(tRef, { isTyping: true, updatedAt: serverTimestamp() });
+      // ব্রাউজার বন্ধ হলে typing indicator auto remove করবে
+      onDisconnect(tRef).remove().catch(() => {});
+    } else {
+      await remove(tRef).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("setTypingIndicator error:", err);
   }
 }
 
@@ -198,8 +214,10 @@ export function listenToTyping(
   friendEmail: string,
   callback: (isFriendTyping: boolean) => void
 ): () => void {
+  if (!myEmail || !friendEmail) return () => {};
   const convId = buildConvId(myEmail, friendEmail);
   const tRef = typingRef(convId, friendEmail);
+  if (!tRef) return () => {};
 
   onValue(
     tRef,
@@ -226,8 +244,10 @@ export function listenToAllTyping(
   friendEmail: string,
   callback: (typingUsers: Record<string, TypingPayload>) => void
 ): () => void {
+  if (!myEmail || !friendEmail) return () => {};
   const convId = buildConvId(myEmail, friendEmail);
   const tRef = typingConvRef(convId);
+  if (!tRef) return () => {};
 
   onValue(
     tRef,

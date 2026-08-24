@@ -26,6 +26,23 @@
           ".validate": "!newData.exists() || (newData.hasChildren(['isTyping', 'updatedAt']) && newData.child('isTyping').isBoolean())"
         }
       }
+    },
+
+    /* ── 1v1 Realtime Battles ────────────────────────────────────────── */
+    "battles": {
+      ".read": true,
+      "$battleId": {
+        ".read": true,
+        ".write": true
+      }
+    },
+
+    /* ── User Battle Invites ─────────────────────────────────────────── */
+    "user_battle_invites": {
+      "$userKey": {
+        ".read": true,
+        ".write": true
+      }
     }
   }
 }

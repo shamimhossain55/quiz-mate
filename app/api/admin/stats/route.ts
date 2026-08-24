@@ -14,17 +14,19 @@ export async function GET() {
   }
 
   try {
-    // 2. Fetch admin dashboard stats using Firebase Admin SDK
-    const usersSnap = await adminDb.collection("users").get();
-    const studentsSnap = await adminDb.collection("students").get();
-    const resultsSnap = await adminDb.collection("results").get();
+    // 2. Fetch admin dashboard stats using efficient Firebase aggregation count (1 read instead of full collection download)
+    const [usersCountSnap, studentsCountSnap, resultsCountSnap] = await Promise.all([
+      adminDb.collection("users").count().get(),
+      adminDb.collection("students").count().get(),
+      adminDb.collection("results").count().get(),
+    ]);
 
     return NextResponse.json({
       success: true,
       stats: {
-        totalUsers: usersSnap.size,
-        totalStudents: studentsSnap.size,
-        totalQuizzesTaken: resultsSnap.size,
+        totalUsers: usersCountSnap.data().count,
+        totalStudents: studentsCountSnap.data().count,
+        totalQuizzesTaken: resultsCountSnap.data().count,
       },
       requestedBy: auth.session.user.email,
     });

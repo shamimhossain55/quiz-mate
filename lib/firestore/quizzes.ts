@@ -99,7 +99,11 @@ export async function getQuizById(quizId: string): Promise<Quiz | null> {
  */
 export async function getActiveLiveQuiz(studentClassId?: string): Promise<Quiz | null> {
   try {
-    const snapshot = await getDocs(collection(db, "quizzes"));
+    const q = query(
+      collection(db, "quizzes"),
+      where("status", "in", ["live", "scheduled"])
+    );
+    const snapshot = await getDocs(q);
     if (snapshot.empty) return null;
 
     const now = Date.now();

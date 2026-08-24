@@ -25,6 +25,88 @@ export async function generateUniqueCustomUid(): Promise<string> {
   return uid;
 }
 
+/**
+ * Returns today's date formatted as "YYYY-MM-DD" in Asia/Dhaka timezone.
+ */
+export function getDhakaDateStr(date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Dhaka",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  } catch {
+    return date.toISOString().split("T")[0];
+  }
+}
+
+/**
+ * Calculates day difference between two YYYY-MM-DD dates (d2 - d1).
+ */
+export function getDaysDifference(d1Str: string, d2Str: string): number {
+  try {
+    const d1 = new Date(`${d1Str}T00:00:00Z`).getTime();
+    const d2 = new Date(`${d2Str}T00:00:00Z`).getTime();
+    return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Calculates updated streak value and last streak date based on previous values.
+ */
+export function calculateUpdatedStreak(
+  currentStreak: number | undefined,
+  lastStreakDate: string | undefined | null,
+  todayStr: string = getDhakaDateStr()
+): { streak: number; lastStreakDate: string; isChanged: boolean } {
+  const streak = currentStreak && currentStreak > 0 ? currentStreak : 1;
+
+  if (!lastStreakDate) {
+    return {
+      streak: streak,
+      lastStreakDate: todayStr,
+      isChanged: true,
+    };
+  }
+
+  if (lastStreakDate === todayStr) {
+    return {
+      streak: streak,
+      lastStreakDate: todayStr,
+      isChanged: false,
+    };
+  }
+
+  const diff = getDaysDifference(lastStreakDate, todayStr);
+
+  if (diff === 1) {
+    // Logged in on consecutive day
+    return {
+      streak: streak + 1,
+      lastStreakDate: todayStr,
+      isChanged: true,
+    };
+  } else if (diff > 1) {
+    // Missed one or more days -> reset to 1
+    return {
+      streak: 1,
+      lastStreakDate: todayStr,
+      isChanged: true,
+    };
+  } else {
+    // diff <= 0 (e.g. clock change or same day)
+    return {
+      streak: streak,
+      lastStreakDate: todayStr,
+      isChanged: false,
+    };
+  }
+}
+
+
 export interface AchievementDef {
   id: string;
   title: string;

@@ -17,20 +17,24 @@ export async function GET() {
 
   const currentEmail = session.user.email.toLowerCase();
 
-  // 1. Pending friend requests count
-  const snap = await adminDb
+  // 1. Pending friend requests count (Firestore count() costs only 1 read)
+  const countSnap = await adminDb
     .collection("friend_requests")
     .where("receiverEmail", "==", currentEmail)
     .where("status", "==", "pending")
+    .count()
     .get();
 
-  // 2. Unread messages count
+  const count = countSnap.data().count || 0;
+
+  // 2. Unread messages count (limited to avoid full collection scan)
   let unreadMsgCount = 0;
   try {
     const unreadConvsSnap = await adminDb
       .collection("conversations")
       .where("participants", "array-contains", currentEmail)
       .where("lastMessageRead", "==", false)
+      .limit(5)
       .get();
 
     unreadConvsSnap.docs.forEach((doc) => {
@@ -43,5 +47,5 @@ export async function GET() {
     console.error("Error fetching unread message count", e);
   }
 
-  return NextResponse.json({ count: snap.size, unreadMsgCount });
+  return NextResponse.json({ count, unreadMsgCount });
 }

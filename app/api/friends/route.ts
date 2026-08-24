@@ -27,22 +27,27 @@ export async function GET() {
   friendsSnap1.docs.forEach((doc) => friendEmails.add(doc.data().user2Email));
   friendsSnap2.docs.forEach((doc) => friendEmails.add(doc.data().user1Email));
 
-  // Fetch profiles of friends
+  // Fetch profiles of friends in batch
   const friendsList: any[] = [];
-  for (const friendEmail of Array.from(friendEmails)) {
-    const sSnap = await adminDb.collection("students").doc(friendEmail).get();
-    if (sSnap.exists) {
-      const data = sSnap.data() || {};
-      friendsList.push({
-        email: friendEmail,
-        name: data.name || "শিক্ষার্থী",
-        customUid: data.customUid || "000000",
-        avatarUrl: data.avatarUrl || null,
-        level: Math.floor((data.point || 0) / 100) + 1,
-        point: data.point || 0,
-        streak: data.streak || 1,
-      });
-    }
+  const friendEmailArray = Array.from(friendEmails);
+  if (friendEmailArray.length > 0) {
+    const refs = friendEmailArray.map((email) => adminDb.collection("students").doc(email));
+    const snaps = await adminDb.getAll(...refs);
+    snaps.forEach((sSnap) => {
+      if (sSnap.exists) {
+        const data = sSnap.data() || {};
+        const friendEmail = sSnap.id;
+        friendsList.push({
+          email: friendEmail,
+          name: data.name || "শিক্ষার্থী",
+          customUid: data.customUid || "000000",
+          avatarUrl: data.avatarUrl || null,
+          level: Math.floor((data.point || 0) / 100) + 1,
+          point: data.point || 0,
+          streak: data.streak || 1,
+        });
+      }
+    });
   }
 
   // 2. Incoming friend requests

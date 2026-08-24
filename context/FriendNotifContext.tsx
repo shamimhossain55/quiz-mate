@@ -32,9 +32,15 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
   const [pendingCount, setPendingCount] = useState(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFetchedRef = useRef<number>(0);
 
-  const fetchCount = useCallback(async () => {
+  const fetchCount = useCallback(async (force = false) => {
     if (status !== "authenticated") return;
+    const now = Date.now();
+    // Prevent fetching more frequently than every 60s unless forced
+    if (!force && now - lastFetchedRef.current < 60_000) return;
+    lastFetchedRef.current = now;
+
     try {
       const res = await fetch("/api/friends/pending-count");
       if (res.ok) {
@@ -47,20 +53,20 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
     }
   }, [status]);
 
-  // Poll every 45 seconds while authenticated & tab is visible
+  // Poll every 120 seconds (2 mins) while authenticated & tab is visible
   useEffect(() => {
     if (status !== "authenticated") {
       setPendingCount(0);
       setUnreadMsgCount(0);
       return;
     }
-    fetchCount();
+    fetchCount(true);
 
     timerRef.current = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
         fetchCount();
       }
-    }, 45_000);
+    }, 120_000);
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -74,6 +80,10 @@ export function FriendNotifProvider({ children }: { children: React.ReactNode })
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [status, fetchCount]);
+
+  const manualRefresh = useCallback(() => {
+    fetchCount(true);
+  }, [fetchCount]);
 
   return (
     <FriendNotifContext.Provider

@@ -19,6 +19,7 @@ import { useSession } from "next-auth/react";
 import BottomNav from "@/components/layout/BottomNav";
 import UserSearchSheet from "@/components/community/UserSearchSheet";
 import IncomingRequestsModal from "@/components/community/IncomingRequestsModal";
+import BattleSetupModal from "@/components/community/BattleSetupModal";
 
 /**
  * Premium Community Page
@@ -82,6 +83,7 @@ export default function CommunityPage() {
   // ── UI state ────────────────────────────────────
   const [showSearch, setShowSearch] = useState(false);
   const [showRequestsModal, setShowRequestsModal] = useState(false);
+  const [battleTargetFriend, setBattleTargetFriend] = useState<Friend | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" } | null>(null);
 
@@ -463,7 +465,7 @@ export default function CommunityPage() {
                     colorIdx={idx}
                     myEmail={session?.user?.email?.toLowerCase() || ""}
                     lastMessage={lastMessages[friend.email.toLowerCase()] ?? null}
-                    onChallenge={() => router.push("/quiz/setup")}
+                    onChallenge={() => setBattleTargetFriend(friend)}
                     onMessage={() =>
                       router.push(
                         `/community/chat/${encodeURIComponent(friend.email)}`
@@ -499,6 +501,16 @@ export default function CommunityPage() {
           )}
         </div>
       </div>
+
+      {/* ── 1v1 Battle Setup Modal ─────────────── */}
+      <BattleSetupModal
+        isOpen={!!battleTargetFriend}
+        onClose={() => setBattleTargetFriend(null)}
+        friend={battleTargetFriend}
+        myEmail={session?.user?.email?.toLowerCase() || ""}
+        myName={session?.user?.name || "শিক্ষার্থী"}
+        myAvatarUrl={session?.user?.image || null}
+      />
 
       {/* ── User Search Sheet ──────────────────── */}
       <UserSearchSheet

@@ -375,10 +375,14 @@ export default function AdminPage() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [chaptersLoading, setChaptersLoading] = useState(false);
+
   const fetchActivityLogs = async () => {
     setActivityLoading(true);
     try {
-      const logs = await getAdminActivityLogs(150);
+      const logs = await getAdminActivityLogs(50);
       setActivityLogs(logs);
     } catch (e) {
       console.error("Failed to load activity logs", e);
@@ -440,40 +444,29 @@ export default function AdminPage() {
     async function loadData() {
       setLoading(true);
       try {
+        // Optimized: Only load essential dashboard data on mount (avoid downloading whole DB)
         const [
-          firestoreUsers,
           firestoreClasses,
           firestoreSubjects,
           firestoreQuizzes,
-          firestoreQuestions,
           firestoreBanners,
-          firestoreChapters,
           firestoreMissions,
           firestoreMissionSettings,
-          firestoreLogs,
         ] = await Promise.all([
-          getAllStudents(),
           getAllClasses(),
           getAllSubjects(),
           getAllQuizzes(),
-          getAllQuestions(),
           getAllBanners(),
-          getAllChapters(),
           getDailyMissionsConfig().catch(() => DEFAULT_DAILY_MISSIONS),
           getDailyMissionsSettings().catch(() => DEFAULT_GLOBAL_SETTINGS),
-          getAdminActivityLogs(150).catch(() => []),
         ]);
 
-        setUsers(firestoreUsers);
         setClasses(firestoreClasses);
         setSubjects(firestoreSubjects);
         setQuizzes(firestoreQuizzes);
-        setQuestions(firestoreQuestions);
         setBanners(firestoreBanners);
-        setAllChapters([...firestoreChapters].sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0)));
         setMissions(firestoreMissions);
         setMissionSettings(firestoreMissionSettings);
-        setActivityLogs(firestoreLogs);
       } catch (err) {
         console.error("Error loading Firestore admin data:", err);
       } finally {
@@ -485,12 +478,30 @@ export default function AdminPage() {
     loadData();
   }, []);
 
-  // Fetch fresh activity logs whenever tab changes to activity
+  // Lazy tab loading: fetch large collections (questions, users, logs, chapters) ONLY when tab is selected
   useEffect(() => {
-    if (activeNav === "activity") {
+    if (activeNav === "questions" && questions.length === 0 && !questionsLoading) {
+      setQuestionsLoading(true);
+      getAllQuestions()
+        .then((q) => setQuestions(q))
+        .catch(() => {})
+        .finally(() => setQuestionsLoading(false));
+    } else if (activeNav === "users" && users.length === 0 && !usersLoading) {
+      setUsersLoading(true);
+      getAllStudents()
+        .then((u) => setUsers(u))
+        .catch(() => {})
+        .finally(() => setUsersLoading(false));
+    } else if (activeNav === "subjects" && allChapters.length === 0 && !chaptersLoading) {
+      setChaptersLoading(true);
+      getAllChapters()
+        .then((chs) => setAllChapters(chs))
+        .catch(() => {})
+        .finally(() => setChaptersLoading(false));
+    } else if (activeNav === "activity" && activityLogs.length === 0 && !activityLoading) {
       fetchActivityLogs();
     }
-  }, [activeNav]);
+  }, [activeNav, questions.length, users.length, allChapters.length, activityLogs.length, questionsLoading, usersLoading, chaptersLoading, activityLoading]);
 
   const handleUpdateRole = async (
     userId: string,
@@ -574,6 +585,9 @@ export default function AdminPage() {
   };
 
   const handleOpenAddQuiz = () => {
+    if (allChapters.length === 0) {
+      getAllChapters().then(setAllChapters).catch(() => {});
+    }
     setEditingQuiz(null);
     const defaultSub = subjects[0]?.id || "";
     const defaultCh = allChapters.find((c) => c.subjectId === defaultSub)?.id || "";
@@ -600,6 +614,9 @@ export default function AdminPage() {
   };
 
   const handleOpenEditQuiz = (quiz: AdminQuiz) => {
+    if (allChapters.length === 0) {
+      getAllChapters().then(setAllChapters).catch(() => {});
+    }
     setEditingQuiz(quiz);
     const questionsList = quiz.questions || [];
     const jsonStr = questionsList.length > 0 ? JSON.stringify(questionsList, null, 2) : "";
@@ -790,6 +807,12 @@ export default function AdminPage() {
   const handleAddQuiz = handleSaveQuiz;
 
   const handleOpenBulkUpload = () => {
+    if (allChapters.length === 0) {
+      getAllChapters().then(setAllChapters).catch(() => {});
+    }
+    if (questions.length === 0) {
+      getAllQuestions().then(setQuestions).catch(() => {});
+    }
     const targetClass =
       questionClassFilter && questionClassFilter !== "all"
         ? questionClassFilter
@@ -819,6 +842,12 @@ export default function AdminPage() {
   };
 
   const handleOpenAddQuestion = () => {
+    if (allChapters.length === 0) {
+      getAllChapters().then(setAllChapters).catch(() => {});
+    }
+    if (questions.length === 0) {
+      getAllQuestions().then(setQuestions).catch(() => {});
+    }
     const targetClass =
       questionClassFilter && questionClassFilter !== "all"
         ? questionClassFilter
@@ -2035,7 +2064,12 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {filteredQuestions.length === 0 ? (
+                  {questionsLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-2 rounded-2xl bg-slate-900 border border-slate-800">
+                      <Loader2 width={24} height={24} className="animate-spin text-teal-400" />
+                      <p className="text-xs font-bold text-slate-400">প্রশ্ন ব্যাংক লোড হচ্ছে...</p>
+                    </div>
+                  ) : filteredQuestions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-2xl bg-slate-900 border border-slate-800 border-dashed">
                       <HelpCircle width={28} height={28} className="text-slate-600" />
                       <p className="text-sm font-bold text-slate-400">ফিল্টারের সাথে কোনো প্রশ্ন পাওয়া যায়নি</p>
@@ -2826,7 +2860,16 @@ export default function AdminPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredUsers.length === 0 ? (
+                          {usersLoading ? (
+                            <tr>
+                              <td colSpan={6} className="px-4 py-12 text-center text-xs text-teal-400 font-bold">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Loader2 width={20} height={20} className="animate-spin text-teal-400" />
+                                  ইউজার তালিকা লোড হচ্ছে...
+                                </div>
+                              </td>
+                            </tr>
+                          ) : filteredUsers.length === 0 ? (
                             <tr>
                               <td colSpan={6} className="px-4 py-8 text-center text-xs text-slate-400 font-bold">
                                 এই ফিল্টারে কোনো ইউজার পাওয়া যায়নি।

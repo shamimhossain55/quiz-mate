@@ -8,6 +8,7 @@ import { QuizSessionProvider } from "@/context/QuizSessionContext";
 import { QuizTimerProvider } from "@/context/QuizTimerContext";
 import { LanguageProvider } from "@/context/LanguageContext";
 import { FriendNotifProvider } from "@/context/FriendNotifContext";
+import IncomingBattleModal from "@/components/community/IncomingBattleModal";
 
 export function Providers({
   children,
@@ -23,6 +24,7 @@ export function Providers({
               <QuizProvider>
                 <QuizTimerProvider>
                   {children}
+                  <IncomingBattleModal />
                 </QuizTimerProvider>
               </QuizProvider>
             </QuizSessionProvider>

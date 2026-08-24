@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, use } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -12,8 +12,10 @@ import {
   WifiOff,
   MessageCircle,
   Zap,
+  Swords,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import BattleSetupModal from "@/components/community/BattleSetupModal";
 import {
   sendMessage,
   listenToMessages,
@@ -85,13 +87,20 @@ function colorFor(name: string) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function DedicatedChatPage({
-  params,
-}: {
-  params: Promise<{ email: string }>;
-}) {
-  const { email: rawEmail } = use(params);
-  const friendEmail = decodeURIComponent(rawEmail).toLowerCase();
+export default function DedicatedChatPage() {
+  const routeParams = useParams();
+  const rawEmail =
+    typeof routeParams?.email === "string"
+      ? routeParams.email
+      : Array.isArray(routeParams?.email)
+      ? routeParams.email[0]
+      : "";
+  let friendEmail = "";
+  try {
+    friendEmail = decodeURIComponent(rawEmail || "").toLowerCase();
+  } catch {
+    friendEmail = (rawEmail || "").toLowerCase();
+  }
   const router = useRouter();
 
   const { data: session } = useSession();
@@ -102,6 +111,7 @@ export default function DedicatedChatPage({
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showEmojis, setShowEmojis] = useState(false);
+  const [showBattleModal, setShowBattleModal] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
@@ -376,12 +386,32 @@ export default function DedicatedChatPage({
           </div>
         </div>
 
-        {/* RTDB badge */}
-        <div className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full bg-teal-50 border border-teal-200/60">
-          <Zap width={10} height={10} className="text-teal-600" />
-          <span className="text-[9px] font-extrabold text-teal-700">Live</span>
+        {/* Actions (Battle + Live badge) */}
+        <div className="flex-shrink-0 flex items-center gap-1.5">
+          <button
+            onClick={() => setShowBattleModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[11px] font-black shadow-xs active:scale-95 transition-all hover:shadow-md cursor-pointer"
+          >
+            <Swords width={12} height={12} />
+            <span className="hidden sm:inline">ব্যাটেল</span>
+          </button>
+
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-teal-50 border border-teal-200/60">
+            <Zap width={10} height={10} className="text-teal-600" />
+            <span className="text-[9px] font-extrabold text-teal-700">Live</span>
+          </div>
         </div>
       </header>
+
+      {/* ── 1v1 Battle Setup Modal ─────────────── */}
+      <BattleSetupModal
+        isOpen={showBattleModal}
+        onClose={() => setShowBattleModal(false)}
+        friend={friend}
+        myEmail={myEmail}
+        myName={session?.user?.name || "শিক্ষার্থী"}
+        myAvatarUrl={session?.user?.image || null}
+      />
 
       {/* ── Messages Chat Body ─────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-1.5 no-scrollbar bg-gradient-to-b from-slate-50 via-slate-100/40 to-slate-50">

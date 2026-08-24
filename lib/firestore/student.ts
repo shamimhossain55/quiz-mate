@@ -28,17 +28,42 @@ function cleanName(name: string | undefined | null, emailFallback: string): stri
   return username.charAt(0).toUpperCase() + username.slice(1);
 }
 
-export async function getStudentProfile(studentId: string): Promise<Student | null> {
+// Client-side in-memory cache to minimize repeated Firestore reads
+const profileCache = new Map<string, { data: Student; timestamp: number }>();
+const PROFILE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+let topStudentsCache: { data: Student[]; timestamp: number } | null = null;
+const TOP_STUDENTS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+export function invalidateStudentCache(studentId?: string) {
+  if (studentId) {
+    profileCache.delete(studentId.toLowerCase());
+  } else {
+    profileCache.clear();
+  }
+  topStudentsCache = null;
+}
+
+export async function getStudentProfile(studentId: string, force = false): Promise<Student | null> {
   if (!studentId) return null;
+  const key = studentId.toLowerCase();
+
+  if (!force) {
+    const cached = profileCache.get(key);
+    if (cached && Date.now() - cached.timestamp < PROFILE_CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
   try {
-    const studentRef = doc(db, "students", studentId);
+    const studentRef = doc(db, "students", key);
     const snap = await getDoc(studentRef);
     if (!snap.exists()) {
       return null;
     }
     const data = snap.data();
     const email = data.email || studentId;
-    return {
+    const result: Student = {
       id: snap.id,
       name: cleanName(data.name, email),
       email,
@@ -49,6 +74,7 @@ export async function getStudentProfile(studentId: string): Promise<Student | nu
       point: data.point || 0,
       totalExam: data.totalExam || 0,
       streak: data.streak || 1,
+      lastStreakDate: data.lastStreakDate || null,
       level: data.level || Math.floor((data.point || 0) / 100) + 1,
       avatarUrl: data.avatarUrl || null,
       classId: data.classId || "class6",
@@ -56,6 +82,9 @@ export async function getStudentProfile(studentId: string): Promise<Student | nu
       group: data.group || "all",
       profileComplete: data.profileComplete ?? false,
     };
+
+    profileCache.set(key, { data: result, timestamp: Date.now() });
+    return result;
   } catch (error) {
     console.error("Error fetching student profile:", error);
     return null;
@@ -85,6 +114,7 @@ export async function updateStudentProfile({
     if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
 
     await setDoc(studentRef, updateData, { merge: true });
+    invalidateStudentCache(studentId);
   } catch (error) {
     console.error("Error updating student profile:", error);
   }
@@ -110,12 +140,17 @@ export async function updateStudentStats({
       },
       { merge: true }
     );
+    invalidateStudentCache(studentId);
   } catch (error) {
     console.error("Error updating student stats:", error);
   }
 }
 
-export async function getTopStudents(limitCount = 50): Promise<Student[]> {
+export async function getTopStudents(limitCount = 50, force = false): Promise<Student[]> {
+  if (!force && topStudentsCache && Date.now() - topStudentsCache.timestamp < TOP_STUDENTS_CACHE_TTL_MS) {
+    return topStudentsCache.data;
+  }
+
   try {
     const q = query(
       collection(db, "students"),
@@ -123,7 +158,7 @@ export async function getTopStudents(limitCount = 50): Promise<Student[]> {
       limit(limitCount)
     );
     const snap = await getDocs(q);
-    return snap.docs.map((docSnap) => {
+    const list = snap.docs.map((docSnap) => {
       const data = docSnap.data();
       const email = data.email || docSnap.id;
       return {
@@ -145,8 +180,11 @@ export async function getTopStudents(limitCount = 50): Promise<Student[]> {
         group: data.group || "all",
       };
     });
+
+    topStudentsCache = { data: list, timestamp: Date.now() };
+    return list;
   } catch (error) {
     console.error("Error fetching top students:", error);
-    return [];
+    return topStudentsCache ? topStudentsCache.data : [];
   }
 }

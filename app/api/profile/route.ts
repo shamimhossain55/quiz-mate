@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase-admin";
-import { generateUniqueCustomUid, ACHIEVEMENTS_CATALOG } from "@/lib/profile-utils";
+import { generateUniqueCustomUid, ACHIEVEMENTS_CATALOG, calculateUpdatedStreak, getDhakaDateStr } from "@/lib/profile-utils";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -16,6 +16,7 @@ export async function GET() {
   const studentSnap = await studentRef.get();
 
   let studentData: Record<string, any>;
+  const todayStr = getDhakaDateStr();
 
   if (!studentSnap.exists) {
     const customUid = await generateUniqueCustomUid();
@@ -33,6 +34,7 @@ export async function GET() {
       point: 0,
       totalExam: 0,
       streak: 1,
+      lastStreakDate: todayStr,
       level: 1,
       isPro: false,
       likesCount: 0,
@@ -75,10 +77,21 @@ export async function GET() {
       isUpdated = true;
     }
 
+    // Dynamic Streak Calculation
+    const streakResult = calculateUpdatedStreak(
+      studentData.streak,
+      studentData.lastStreakDate,
+      todayStr
+    );
+    studentData.streak = streakResult.streak;
+    studentData.lastStreakDate = streakResult.lastStreakDate;
+    if (streakResult.isChanged) {
+      isUpdated = true;
+    }
+
     // Default values if missing
     if (studentData.point === undefined) studentData.point = 0;
     if (studentData.totalExam === undefined) studentData.totalExam = 0;
-    if (studentData.streak === undefined) studentData.streak = 1;
     if (studentData.likesCount === undefined) studentData.likesCount = 0;
     if (studentData.friendsCount === undefined) studentData.friendsCount = 0;
 

@@ -23,8 +23,11 @@ import {
   Copy,
   Check,
   Loader2,
+  Swords,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSession } from "next-auth/react";
+import BattleSetupModal from "@/components/community/BattleSetupModal";
 
 /* ─── Types ────────────────────────────────────── */
 type PublicStudent = {
@@ -137,10 +140,12 @@ export default function PublicProfilePage({
 }) {
   const { uid } = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
   const [student, setStudent] = useState<PublicStudent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showBattleModal, setShowBattleModal] = useState(false);
 
   // Like system
   const [isLiked, setIsLiked] = useState(false);
@@ -522,52 +527,63 @@ export default function PublicProfilePage({
 
                   {/* Add Friend badge — other user only */}
                   {!isOwnProfile && (
-                    <button
-                      id="add-friend-btn"
-                      onClick={handleSendFriendRequest}
-                      disabled={friendStatus === "sending" || friendStatus === "sent" || friendStatus === "friend"}
-                      aria-label="বন্ধু যোগ করুন"
-                      className="flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border select-none transition-all active:scale-95 disabled:opacity-80 cursor-pointer"
-                      style={{
-                        background:
-                          friendStatus === "friend"
-                            ? "rgba(16,185,129,0.18)"
-                            : friendStatus === "sent"
-                            ? "rgba(100,116,139,0.2)"
-                            : "rgba(139,92,246,0.18)",
-                        borderColor:
-                          friendStatus === "friend"
-                            ? "rgba(16,185,129,0.4)"
-                            : friendStatus === "sent"
-                            ? "rgba(100,116,139,0.3)"
-                            : "rgba(139,92,246,0.4)",
-                        color:
-                          friendStatus === "friend"
-                            ? "#34d399"
-                            : friendStatus === "sent"
-                            ? "#94a3b8"
-                            : "#c084fc",
-                      }}
-                    >
-                      {friendStatus === "sending" ? (
-                        <Loader2 size={10} className="animate-spin" />
-                      ) : friendStatus === "sent" ? (
-                        <>
-                          <Check size={10} />
-                          <span>পাঠানো হয়েছে</span>
-                        </>
-                      ) : friendStatus === "friend" ? (
-                        <>
-                          <Check size={10} />
-                          <span>বন্ধু</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus size={10} />
-                          <span>Add Friend</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        id="add-friend-btn"
+                        onClick={handleSendFriendRequest}
+                        disabled={friendStatus === "sending" || friendStatus === "sent" || friendStatus === "friend"}
+                        aria-label="বন্ধু যোগ করুন"
+                        className="flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full border select-none transition-all active:scale-95 disabled:opacity-80 cursor-pointer"
+                        style={{
+                          background:
+                            friendStatus === "friend"
+                              ? "rgba(16,185,129,0.18)"
+                              : friendStatus === "sent"
+                              ? "rgba(100,116,139,0.2)"
+                              : "rgba(139,92,246,0.18)",
+                          borderColor:
+                            friendStatus === "friend"
+                              ? "rgba(16,185,129,0.4)"
+                              : friendStatus === "sent"
+                              ? "rgba(100,116,139,0.3)"
+                              : "rgba(139,92,246,0.4)",
+                          color:
+                            friendStatus === "friend"
+                              ? "#34d399"
+                              : friendStatus === "sent"
+                              ? "#94a3b8"
+                              : "#c084fc",
+                        }}
+                      >
+                        {friendStatus === "sending" ? (
+                          <Loader2 size={10} className="animate-spin" />
+                        ) : friendStatus === "sent" ? (
+                          <>
+                            <Check size={10} />
+                            <span>পাঠানো হয়েছে</span>
+                          </>
+                        ) : friendStatus === "friend" ? (
+                          <>
+                            <Check size={10} />
+                            <span>বন্ধু</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus size={10} />
+                            <span>Add Friend</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* 1v1 Battle Challenge Button */}
+                      <button
+                        onClick={() => setShowBattleModal(true)}
+                        className="flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white border border-violet-400/40 shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
+                      >
+                        <Swords size={10} />
+                        <span>১v১ ব্যাটেল</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -703,6 +719,23 @@ export default function PublicProfilePage({
 
         </div>
       </div>
+
+      {/* 1v1 Battle Setup Modal */}
+      {student && (
+        <BattleSetupModal
+          isOpen={showBattleModal}
+          onClose={() => setShowBattleModal(false)}
+          friend={{
+            email: student.uid.includes("@") ? student.uid : student.customUid,
+            name: student.name,
+            avatarUrl: student.avatarUrl,
+            level: student.level,
+          }}
+          myEmail={session?.user?.email || ""}
+          myName={session?.user?.name || "শিক্ষার্থী"}
+          myAvatarUrl={session?.user?.image || null}
+        />
+      )}
     </div>
   );
 }
