@@ -127,10 +127,16 @@ const FALLBACK_BATTLE_QUESTIONS: Record<string, Array<{ questionText: string; op
 
 export async function getBattleQuestions(
   subjectId?: string,
-  count = 5
+  count = 5,
+  chapterId?: string
 ): Promise<Array<{ id: string; questionText: string; options: string[]; correctAnswer: number; explanation?: string }>> {
   let questions: Question[] = [];
-  if (subjectId) {
+
+  if (chapterId && chapterId !== "all") {
+    // Fetch by specific chapter (most precise)
+    questions = await getQuestions(chapterId, subjectId);
+  } else if (subjectId) {
+    // Fetch by subject (all chapters)
     questions = await getQuestions("", subjectId);
   }
 

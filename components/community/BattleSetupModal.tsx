@@ -14,7 +14,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSubjects } from "@/lib/firestore/subjects";
+import { getChapters } from "@/lib/firestore/chapters";
 import { getBattleQuestions } from "@/lib/firestore/questions";
+import { Chapter } from "@/types/firestore";
 import {
   createBattleChallenge,
   listenToBattleRoom,
@@ -52,6 +54,10 @@ export default function BattleSetupModal({
   const [subjects, setSubjects] = useState<Array<{ id: string; name: string; slug?: string }>>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("general");
   const [selectedSubjectName, setSelectedSubjectName] = useState<string>("সাধারণ জ্ঞান");
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [selectedChapterId, setSelectedChapterId] = useState<string>("all");
+  const [selectedChapterName, setSelectedChapterName] = useState<string>("সব অধ্যায়");
+  const [isLoadingChapters, setIsLoadingChapters] = useState(false);
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -65,6 +71,9 @@ export default function BattleSetupModal({
       setIsSending(false);
       setActiveBattleId(null);
       setErrorMsg(null);
+      setChapters([]);
+      setSelectedChapterId("all");
+      setSelectedChapterName("সব অধ্যায়");
       return;
     }
 
@@ -99,6 +108,31 @@ export default function BattleSetupModal({
     loadSubs();
   }, [isOpen, myClassId]);
 
+  // Load chapters when subject changes
+  useEffect(() => {
+    if (!isOpen || selectedSubjectId === "general") {
+      setChapters([]);
+      setSelectedChapterId("all");
+      setSelectedChapterName("সব অধ্যায়");
+      return;
+    }
+
+    async function loadChapters() {
+      setIsLoadingChapters(true);
+      setSelectedChapterId("all");
+      setSelectedChapterName("সব অধ্যায়");
+      try {
+        const fetched = await getChapters(selectedSubjectId);
+        setChapters(fetched);
+      } catch {
+        setChapters([]);
+      } finally {
+        setIsLoadingChapters(false);
+      }
+    }
+    loadChapters();
+  }, [isOpen, selectedSubjectId]);
+
   // Listen to battle room status once challenge is sent
   useEffect(() => {
     if (!activeBattleId) return;
@@ -129,7 +163,7 @@ export default function BattleSetupModal({
 
     try {
       // 1. Fetch battle questions
-      const battleQuestions = await getBattleQuestions(selectedSubjectId, questionCount);
+      const battleQuestions = await getBattleQuestions(selectedSubjectId, questionCount, selectedChapterId);
 
       // 2. Create room in RTDB & push invite
       const battleId = await createBattleChallenge({
@@ -297,6 +331,40 @@ export default function BattleSetupModal({
                     </select>
                   )}
                 </div>
+
+                {/* Chapter Picker — only shown when chapters exist for selected subject */}
+                {(isLoadingChapters || chapters.length > 0) && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-extrabold text-slate-300 flex items-center gap-1.5">
+                      <Sparkles width={13} height={13} className="text-teal-400" />
+                      অধ্যায় নির্বাচন করুন:
+                    </label>
+                    {isLoadingChapters ? (
+                      <div className="h-10 rounded-xl bg-slate-800/60 animate-pulse" />
+                    ) : (
+                      <select
+                        value={selectedChapterId}
+                        onChange={(e) => {
+                          setSelectedChapterId(e.target.value);
+                          if (e.target.value === "all") {
+                            setSelectedChapterName("সব অধ্যায়");
+                          } else {
+                            const match = chapters.find((c) => c.id === e.target.value);
+                            if (match) setSelectedChapterName(match.name);
+                          }
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-teal-500 transition-colors cursor-pointer"
+                      >
+                        <option value="all">📚 সব অধ্যায় (মিশ্র প্রশ্ন)</option>
+                        {chapters.map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            {ch.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
 
                 {/* Question Count Picker */}
                 <div className="space-y-1.5">
