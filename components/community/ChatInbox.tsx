@@ -9,17 +9,22 @@ import {
   MessageCircle,
   Loader2,
   Smile,
-  CheckCheck,
   WifiOff,
   Zap,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import MessageStatusTick from "@/components/community/MessageStatusTick";
 import {
   sendMessage,
   listenToMessages,
   setTypingIndicator,
   listenToTyping,
+  listenToUserPresence,
+  markConversationAsSeen,
+  markConversationAsDelivered,
   type RtdbMessage,
+  type PresencePayload,
+  type MessageStatus,
 } from "@/lib/rtdb/chat-service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -30,6 +35,7 @@ type Message = {
   text: string;
   timestamp: number;
   pending?: boolean;
+  status: MessageStatus;
 };
 
 type Friend = {
@@ -72,6 +78,15 @@ function formatDateLabel(ms: number) {
   return d.toLocaleDateString("bn-BD", { day: "numeric", month: "short" });
 }
 
+function formatLastSeen(ms: number): string {
+  if (!ms) return "অফলাইন";
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return "এইমাত্র অ্যাক্টিভ ছিলেন";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} মিনিট আগে`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} ঘন্টা আগে`;
+  return `${Math.floor(diff / 86_400_000)} দিন আগে`;
+}
+
 const avatarColors = [
   { bg: "bg-teal-500", text: "text-white" },
   { bg: "bg-violet-500", text: "text-white" },
@@ -101,11 +116,13 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
+  const [friendPresence, setFriendPresence] = useState<PresencePayload | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
+  const lastSeenCallRef = useRef<number>(0);
 
   // ── 1. Real-time messages via RTDB onValue() ──────────────────────────────
   useEffect(() => {
@@ -126,12 +143,15 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
           text: m.text,
           timestamp: m.timestamp,
           pending: false,
+          status: m.status,
         }));
         setMessages(mapped);
         setIsOffline(false);
         if (firstCall) {
           setIsInitialLoading(false);
           firstCall = false;
+          // Mark friend's messages as seen on initial load
+          triggerMarkAsSeen();
         }
       }
     );
@@ -162,7 +182,22 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
     return unsubscribe;
   }, [isOpen, myEmail, friendEmail]);
 
-  // ── 3. Reset on close ─────────────────────────────────────────────────────
+  // ── 3. Listen to friend's presence (online/offline) ──────────────────────
+  useEffect(() => {
+    if (!isOpen || !friendEmail) return;
+
+    const unsubscribe = listenToUserPresence(friendEmail, (presence) => {
+      setFriendPresence(presence);
+      // When friend comes online, mark our messages to them as delivered
+      if (presence?.isOnline && myEmail) {
+        markConversationAsDelivered(friendEmail, myEmail).catch(() => {});
+      }
+    });
+
+    return unsubscribe;
+  }, [isOpen, friendEmail, myEmail]);
+
+  // ── 4. Reset on close ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
       setInputText("");
@@ -170,6 +205,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
       setMessages([]);
       setIsInitialLoading(true);
       setIsFriendTyping(false);
+      setFriendPresence(null);
       // Clear typing indicator when closing
       if (isTypingRef.current && myEmail && friendEmail) {
         isTypingRef.current = false;
@@ -181,14 +217,16 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
     }
   }, [isOpen, myEmail, friendEmail]);
 
-  // ── 4. Scroll to bottom on new messages ──────────────────────────────────
+  // ── 5. Scroll to bottom on new messages ──────────────────────────────────
   useEffect(() => {
     if (messages.length > 0) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      // We are looking at the chat — mark as seen
+      if (isOpen) triggerMarkAsSeen();
     }
-  }, [messages.length]);
+  }, [messages.length, isOpen]);
 
-  // ── 5. Cleanup typing on unmount ─────────────────────────────────────────
+  // ── 6. Cleanup typing on unmount ─────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (myEmail && friendEmail && isTypingRef.current) {
@@ -198,7 +236,16 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
     };
   }, [myEmail, friendEmail]);
 
-  // ── 6. Handle input + typing indicator ───────────────────────────────────
+  // ── Helper: throttled mark-as-seen ───────────────────────────────────────
+  const triggerMarkAsSeen = useCallback(() => {
+    if (!myEmail || !friendEmail) return;
+    const now = Date.now();
+    if (now - lastSeenCallRef.current < 2000) return;
+    lastSeenCallRef.current = now;
+    markConversationAsSeen(myEmail, friendEmail).catch(() => {});
+  }, [myEmail, friendEmail]);
+
+  // ── 7. Handle input + typing indicator ───────────────────────────────────
   const handleInputChange = useCallback(
     (value: string) => {
       setInputText(value);
@@ -225,7 +272,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
     [myEmail, friendEmail]
   );
 
-  // ── 7. Send message via RTDB ──────────────────────────────────────────────
+  // ── 8. Send message via RTDB ──────────────────────────────────────────────
   const handleSend = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -246,6 +293,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
         text: trimmed,
         timestamp: Date.now(),
         pending: true,
+        status: "sent",
       };
       setMessages((prev) => [...prev, optimisticMsg]);
       setInputText("");
@@ -255,7 +303,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
       setIsSending(true);
       try {
         await sendMessage(myEmail, friendEmail, trimmed);
-        // onValue() listener নতুন message automatically দেখাবে, তাই pending remove করি
+        // onValue() listener will bring the real message, remove optimistic
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } catch {
         setMessages((prev) =>
@@ -282,6 +330,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
 
   const ac = colorFor(friend.name);
   let lastDateLabel = "";
+  const isFriendOnline = friendPresence?.isOnline === true;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -340,7 +389,12 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                       </span>
                     )}
                   </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white" />
+                  {/* Online indicator dot */}
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white transition-colors duration-500 ${
+                      isFriendOnline ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
+                  />
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -361,11 +415,17 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                       </span>
                       টাইপ করছে...
                     </p>
-                  ) : (
+                  ) : isFriendOnline ? (
                     <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       অ্যাক্টিভ
                     </p>
+                  ) : friendPresence?.lastSeen ? (
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      {formatLastSeen(friendPresence.lastSeen)}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 font-medium">অফলাইন</p>
                   )}
                 </div>
 
@@ -479,6 +539,7 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                               {msg.text}
                             </div>
 
+                            {/* Timestamp + tick — show on last message in a group */}
                             {!isSameAsNext && (
                               <div
                                 className={`flex items-center gap-1 mt-0.5 px-1 ${
@@ -489,10 +550,10 @@ export default function ChatInbox({ isOpen, friend, onClose }: ChatInboxProps) {
                                   {formatTime(msg.timestamp)}
                                 </span>
                                 {isMe && (
-                                  <CheckCheck
-                                    width={12}
-                                    height={12}
-                                    className={msg.pending ? "text-slate-300" : "text-teal-500"}
+                                  <MessageStatusTick
+                                    pending={msg.pending}
+                                    status={msg.status}
+                                    size={12}
                                   />
                                 )}
                               </div>

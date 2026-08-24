@@ -8,7 +8,6 @@ import {
   Send,
   Loader2,
   Smile,
-  CheckCheck,
   WifiOff,
   MessageCircle,
   Zap,
@@ -16,12 +15,18 @@ import {
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import BattleSetupModal from "@/components/community/BattleSetupModal";
+import MessageStatusTick from "@/components/community/MessageStatusTick";
 import {
   sendMessage,
   listenToMessages,
   setTypingIndicator,
   listenToTyping,
+  listenToUserPresence,
+  markConversationAsSeen,
+  markConversationAsDelivered,
   type RtdbMessage,
+  type PresencePayload,
+  type MessageStatus,
 } from "@/lib/rtdb/chat-service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,6 +37,7 @@ type Message = {
   text: string;
   timestamp: number;
   pending?: boolean;
+  status: MessageStatus;
 };
 
 type Friend = {
@@ -68,6 +74,15 @@ function formatDateLabel(ms: number) {
   if (d.toDateString() === today.toDateString()) return "আজ";
   if (d.toDateString() === yesterday.toDateString()) return "গতকাল";
   return d.toLocaleDateString("bn-BD", { day: "numeric", month: "short" });
+}
+
+function formatLastSeen(ms: number): string {
+  if (!ms) return "অফলাইন";
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return "এইমাত্র অ্যাক্টিভ ছিলেন";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} মিনিট আগে`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} ঘন্টা আগে`;
+  return `${Math.floor(diff / 86_400_000)} দিন আগে`;
 }
 
 const avatarColors = [
@@ -115,6 +130,7 @@ export default function DedicatedChatPage() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [isFriendTyping, setIsFriendTyping] = useState(false);
+  const [friendPresence, setFriendPresence] = useState<PresencePayload | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -122,6 +138,8 @@ export default function DedicatedChatPage() {
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** আমি কি typing করছি — duplicate set এড়াতে */
   const isTypingRef = useRef(false);
+  /** last seen mark — avoid duplicate calls */
+  const lastSeenCallRef = useRef<number>(0);
 
   // ── 1. Load friend profile ────────────────────────────────────────────────
   useEffect(() => {
@@ -159,12 +177,6 @@ export default function DedicatedChatPage() {
     setIsInitialLoading(true);
     setMessages([]);
 
-    /**
-     * listenToMessages() returns an unsubscribe function.
-     * RTDB onValue() fires immediately with current data,
-     * তারপর প্রতিটা নতুন change-এ আবার fire করে।
-     * Polling দরকার নেই — এটাই RTDB এর সুবিধা।
-     */
     let firstCall = true;
     const unsubscribe = listenToMessages(
       myEmail,
@@ -177,17 +189,20 @@ export default function DedicatedChatPage() {
           text: m.text,
           timestamp: m.timestamp,
           pending: false,
+          status: m.status,
         }));
         setMessages(mapped);
         setIsOffline(false);
         if (firstCall) {
           setIsInitialLoading(false);
           firstCall = false;
+          // Mark friend's messages as seen on initial load
+          triggerMarkAsSeen();
         }
       }
     );
 
-    // Offline detection: setTimeout fallback — RTDB নিজেই reconnect করে
+    // Offline detection
     const offlineTimer = setTimeout(() => {
       if (firstCall) {
         setIsOffline(true);
@@ -213,14 +228,32 @@ export default function DedicatedChatPage() {
     return unsubscribe;
   }, [myEmail, friendEmail]);
 
-  // ── 4. Scroll to bottom on new messages ──────────────────────────────────
+  // ── 4. Listen to friend's presence (online/offline) ──────────────────────
+  useEffect(() => {
+    if (!friendEmail) return;
+
+    const unsubscribe = listenToUserPresence(friendEmail, (presence) => {
+      setFriendPresence(presence);
+      // When friend comes online, mark our messages as delivered from their side
+      // (they can now receive the messages)
+      if (presence?.isOnline && myEmail) {
+        markConversationAsDelivered(friendEmail, myEmail).catch(() => {});
+      }
+    });
+
+    return unsubscribe;
+  }, [friendEmail, myEmail]);
+
+  // ── 5. Scroll to bottom on new messages ──────────────────────────────────
   useEffect(() => {
     if (messages.length > 0) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      // Mark as seen whenever new messages arrive (we're in chat room = we see them)
+      triggerMarkAsSeen();
     }
   }, [messages.length]);
 
-  // ── 5. Cleanup typing indicator on unmount ────────────────────────────────
+  // ── 6. Cleanup typing indicator on unmount ────────────────────────────────
   useEffect(() => {
     return () => {
       if (myEmail && friendEmail && isTypingRef.current) {
@@ -230,7 +263,17 @@ export default function DedicatedChatPage() {
     };
   }, [myEmail, friendEmail]);
 
-  // ── 6. Handle input change + typing indicator ────────────────────────────
+  // ── Helper: throttled mark-as-seen ───────────────────────────────────────
+  const triggerMarkAsSeen = useCallback(() => {
+    if (!myEmail || !friendEmail) return;
+    const now = Date.now();
+    // Throttle: don't call more than once per 2 seconds
+    if (now - lastSeenCallRef.current < 2000) return;
+    lastSeenCallRef.current = now;
+    markConversationAsSeen(myEmail, friendEmail).catch(() => {});
+  }, [myEmail, friendEmail]);
+
+  // ── 7. Handle input change + typing indicator ────────────────────────────
   const handleInputChange = useCallback(
     (value: string) => {
       setInputText(value);
@@ -258,7 +301,7 @@ export default function DedicatedChatPage() {
     [myEmail, friendEmail]
   );
 
-  // ── 7. Send message via RTDB ──────────────────────────────────────────────
+  // ── 8. Send message via RTDB ──────────────────────────────────────────────
   const handleSend = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
@@ -271,7 +314,7 @@ export default function DedicatedChatPage() {
         setTypingIndicator(myEmail, friendEmail, false).catch(() => {});
       }
 
-      // Optimistic UI: pending message দেখাও
+      // Optimistic UI: show pending message immediately
       const optimisticId = `pending_${Date.now()}`;
       const optimisticMsg: Message = {
         id: optimisticId,
@@ -279,6 +322,7 @@ export default function DedicatedChatPage() {
         text: trimmed,
         timestamp: Date.now(),
         pending: true,
+        status: "sent",
       };
       setMessages((prev) => [...prev, optimisticMsg]);
       setInputText("");
@@ -287,12 +331,12 @@ export default function DedicatedChatPage() {
 
       setIsSending(true);
       try {
-        // RTDB-তে push — onValue() listener automatically নতুন message দেখাবে
+        // sendMessage checks friend's presence and sets "sent" or "delivered"
         await sendMessage(myEmail, friendEmail, trimmed);
-        // Optimistic message সরিয়ে নাও — listener নতুন real message আনবে
+        // Remove optimistic message — listener will bring the real one
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       } catch {
-        // Send failed — pending flag রাখো যাতে user জানে
+        // Keep as failed (pending: false shows gray)
         setMessages((prev) =>
           prev.map((m) =>
             m.id === optimisticId ? { ...m, pending: false } : m
@@ -316,6 +360,9 @@ export default function DedicatedChatPage() {
   const friendName = friend?.name || friendEmail.split("@")[0];
   const ac = colorFor(friendName);
   let lastDateLabel = "";
+
+  // ─── Derived presence state ───────────────────────────────────────────────
+  const isFriendOnline = friendPresence?.isOnline === true;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -350,7 +397,12 @@ export default function DedicatedChatPage() {
                 </span>
               )}
             </div>
-            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white" />
+            {/* Online indicator dot */}
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white transition-colors duration-500 ${
+                isFriendOnline ? "bg-emerald-500" : "bg-slate-300"
+              }`}
+            />
           </div>
 
           <div className="flex flex-col min-w-0">
@@ -377,11 +429,17 @@ export default function DedicatedChatPage() {
                 </span>
                 টাইপ করছেন...
               </p>
-            ) : (
+            ) : isFriendOnline ? (
               <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 অ্যাক্টিভ আছেন
               </p>
+            ) : friendPresence?.lastSeen ? (
+              <p className="text-[10px] text-slate-400 font-medium">
+                {formatLastSeen(friendPresence.lastSeen)}
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-400 font-medium">অফলাইন</p>
             )}
           </div>
         </div>
@@ -505,6 +563,7 @@ export default function DedicatedChatPage() {
                         {msg.text}
                       </div>
 
+                      {/* Timestamp + tick — show on last message in a group */}
                       {!isSameAsNext && (
                         <div
                           className={`flex items-center gap-1 mt-1 px-1 ${
@@ -515,14 +574,10 @@ export default function DedicatedChatPage() {
                             {formatTime(msg.timestamp)}
                           </span>
                           {isMe && (
-                            <CheckCheck
-                              width={13}
-                              height={13}
-                              className={
-                                msg.pending
-                                  ? "text-slate-300"
-                                  : "text-teal-600 stroke-[2.5]"
-                              }
+                            <MessageStatusTick
+                              pending={msg.pending}
+                              status={msg.status}
+                              size={13}
                             />
                           )}
                         </div>
