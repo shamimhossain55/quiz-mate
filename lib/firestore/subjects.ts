@@ -23,10 +23,17 @@ function isClassMatching(subjectClassId?: string, studentClassId?: string): bool
 }
 
 let subjectsMemoryCache: { [key: string]: { data: FirestoreSubject[]; timestamp: number } } = {};
-const SUBJECT_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const SUBJECT_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export function clearSubjectCache(): void {
   subjectsMemoryCache = {};
+  if (typeof window !== "undefined") {
+    try {
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith("qm_subjects_cache_")) localStorage.removeItem(k);
+      });
+    } catch {}
+  }
 }
 
 /**
@@ -40,6 +47,19 @@ export async function getSubjects(
   const cached = subjectsMemoryCache[cacheKey];
   if (cached && Date.now() - cached.timestamp < SUBJECT_CACHE_TTL_MS) {
     return cached.data;
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const ls = localStorage.getItem(`qm_subjects_cache_${cacheKey}`);
+      if (ls) {
+        const parsed = JSON.parse(ls);
+        if (parsed.timestamp && Date.now() - parsed.timestamp < SUBJECT_CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          subjectsMemoryCache[cacheKey] = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {}
   }
 
   try {
@@ -75,10 +95,14 @@ export async function getSubjects(
     // Client-side sort by order
     docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
 
-    subjectsMemoryCache[cacheKey] = {
+    const cacheObj = {
       data: docs,
       timestamp: Date.now(),
     };
+    subjectsMemoryCache[cacheKey] = cacheObj;
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem(`qm_subjects_cache_${cacheKey}`, JSON.stringify(cacheObj)); } catch {}
+    }
 
     return docs;
   } catch (err) {

@@ -1,10 +1,8 @@
 {
   "rules": {
-    /* Default: block other paths */
     ".read": false,
     ".write": false,
 
-    /* ── Direct Message Conversations ───────────────────────────────── */
     "dm_messages": {
       "$convId": {
         "messages": {
@@ -17,7 +15,6 @@
       }
     },
 
-    /* ── Typing Indicators ──────────────────────────────────────────── */
     "dm_typing": {
       "$convId": {
         ".read": true,
@@ -28,7 +25,6 @@
       }
     },
 
-    /* ── 1v1 Realtime Battles ────────────────────────────────────────── */
     "battles": {
       ".read": true,
       "$battleId": {
@@ -37,11 +33,18 @@
       }
     },
 
-    /* ── User Battle Invites ─────────────────────────────────────────── */
     "user_battle_invites": {
       "$userKey": {
         ".read": true,
         ".write": true
+      }
+    },
+
+    "presence": {
+      "$userKey": {
+        ".read": true,
+        ".write": true,
+        ".validate": "!newData.exists() || (newData.hasChildren(['isOnline', 'lastSeen']) && newData.child('isOnline').isBoolean())"
       }
     }
   }

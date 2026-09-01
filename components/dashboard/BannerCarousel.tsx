@@ -140,20 +140,29 @@ export default function BannerCarousel({ slides = [] }: BannerCarouselProps) {
         </div>
 
         {/* Bottom CTA Row */}
-        <div className="flex items-center justify-between pb-1">
+        <div className="flex items-center justify-between pb-1 mt-0.5">
           <button
             onClick={() => router.push(currentBanner.linkUrl || "/quiz/setup")}
-            className="h-8 px-3 rounded-lg bg-white text-slate-900 font-extrabold text-[11px] shadow-md hover:bg-amber-300 active:scale-95 transition-all duration-200 flex items-center gap-1 group/btn"
+            className="h-8 px-3.5 rounded-xl bg-white text-slate-900 font-extrabold text-[11px] shadow-md hover:bg-amber-300 active:scale-95 transition-all duration-200 flex items-center gap-1.5 group/btn cursor-pointer"
           >
-            <span>{currentBanner.ctaText || "এক্সপ্লোর করুন 🚀"}</span>
+            <span>{currentBanner.ctaText || "এক্সপ্লোর করুন"}</span>
             <Play width={11} height={11} fill="currentColor" className="text-slate-900 group-hover/btn:translate-x-0.5 transition-transform" />
           </button>
 
-          {/* XP Bonus */}
-          <div className="flex items-center gap-1 text-[9px] text-teal-100 font-bold bg-white/10 backdrop-blur-md px-2 py-1 rounded-lg border border-white/15">
-            <Zap width={10} height={10} className="text-amber-300 fill-amber-300" />
-            <span>+১২৫ XP বোনাস</span>
-          </div>
+          {currentBanner.badgeColor ? (
+            <div
+              className="flex items-center gap-1 text-[9.5px] font-extrabold backdrop-blur-md px-2.5 py-1 rounded-xl border border-white/20 shadow-2xs"
+              style={{ backgroundColor: currentBanner.badgeColor, color: "#ffffff" }}
+            >
+              <Zap width={10} height={10} className="fill-current text-white" />
+              <span>{currentBanner.badge || "বিশেষ অফার"}</span>
+            </div>
+          ) : currentBanner.badge ? (
+            <div className="flex items-center gap-1 text-[9.5px] text-white font-extrabold bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-xl border border-white/25 shadow-2xs">
+              <Zap width={10} height={10} className="text-amber-300 fill-amber-300" />
+              <span>{currentBanner.badge}</span>
+            </div>
+          ) : null}
         </div>
       </div>
 

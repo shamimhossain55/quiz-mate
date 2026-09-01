@@ -120,28 +120,8 @@ export default function CommunityPage() {
       );
       setOutgoingEmails(outgoing);
 
-      // Fetch last message for each friend
-      const msgMap: Record<string, { text: string; senderEmail: string; read: boolean }> = {};
-      await Promise.all(
-        rawFriends.map(async (f) => {
-          try {
-            const r = await fetch(`/api/messages?friendEmail=${encodeURIComponent(f.email)}`);
-            if (!r.ok) return;
-            const d = await r.json();
-            if (d.lastMessage) {
-              msgMap[f.email.toLowerCase()] = d.lastMessage;
-            } else if (d.messages && d.messages.length > 0) {
-              const last = d.messages[d.messages.length - 1];
-              msgMap[f.email.toLowerCase()] = {
-                text: last.text || "",
-                senderEmail: last.senderEmail || "",
-                read: last.read ?? true,
-              };
-            }
-          } catch {}
-        })
-      );
-      setLastMessages(msgMap);
+      // Note: N+1 message queries removed to prevent excessive Firestore reads
+      setLastMessages({});
     } catch (e) {
       console.error("Failed to load community data:", e);
     } finally {
@@ -261,6 +241,21 @@ export default function CommunityPage() {
 
         {/* ── Scrollable Content ──────────────────── */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-1 pb-6 space-y-4 no-scrollbar">
+
+          {/* Maintenance / Paused Notice Banner */}
+          <div className="rounded-2xl bg-amber-50 border border-amber-200/80 p-3.5 flex items-start gap-3 shadow-2xs">
+            <div className="h-8 w-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center flex-shrink-0 text-amber-600 mt-0.5">
+              <Swords width={16} height={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-amber-900 leading-snug">
+                ১v১ ফ্রেন্ড ব্যাটেল ও লাইভ মেসেজিং সাময়িক বিরতিতে
+              </p>
+              <p className="text-[10.5px] text-amber-700 font-medium mt-0.5 leading-relaxed">
+                ডাটাবেস স্পিড ও অপটিমাইজেশন নিশ্চিত করতে এই ফিচার দুটি সাময়িকভাবে অফ রাখা হয়েছে। শীঘ্রই পুনরায় চালু হবে!
+              </p>
+            </div>
+          </div>
 
           {/* Toast */}
           <AnimatePresence>

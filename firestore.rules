@@ -58,6 +58,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /questions/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /daily_missions_config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /admin_activity_logs/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ── Conversations & Messaging ────────────────────────────────────────
     match /conversations/{convId} {
       allow read: if true;

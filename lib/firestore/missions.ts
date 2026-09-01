@@ -103,6 +103,18 @@ export async function getDailyMissionsConfig(): Promise<DailyMissionConfig[]> {
   if (missionsConfigCache && Date.now() - missionsConfigCache.timestamp < MISSIONS_CACHE_TTL_MS) {
     return missionsConfigCache.data;
   }
+  if (typeof window !== "undefined") {
+    try {
+      const ls = localStorage.getItem("qm_missions_config_cache");
+      if (ls) {
+        const parsed = JSON.parse(ls);
+        if (parsed.timestamp && Date.now() - parsed.timestamp < MISSIONS_CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          missionsConfigCache = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {}
+  }
   try {
     const colRef = collection(db, "daily_missions_config");
     const snapshot = await getDocs(colRef);
@@ -131,7 +143,11 @@ export async function getDailyMissionsConfig(): Promise<DailyMissionConfig[]> {
     });
 
     docs.sort((a, b) => a.order - b.order);
-    missionsConfigCache = { data: docs, timestamp: Date.now() };
+    const cacheObj = { data: docs, timestamp: Date.now() };
+    missionsConfigCache = cacheObj;
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem("qm_missions_config_cache", JSON.stringify(cacheObj)); } catch {}
+    }
     return docs;
   } catch (err) {
     console.error("Error fetching daily missions config:", err);

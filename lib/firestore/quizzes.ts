@@ -8,6 +8,7 @@ import {
   deleteDoc,
   query,
   where,
+  limit,
   onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
@@ -158,58 +159,72 @@ export function clearQuizzesCache() {
 }
 
 /**
- * Real-time listener for active live quizzes for a student's class
- * Filters by status ('live' or 'scheduled') instead of listening to the whole collection
+ * Lightweight check for active live quizzes for a student's class
+ * Uses cached getDocs with limit(10) instead of continuous stream listener to minimize reads
  */
+let activeLiveQuizCache: { data: Quiz | null; timestamp: number; classId?: string } | null = null;
+const LIVE_QUIZ_CACHE_TTL = 5 * 60 * 1000; // 5 mins
+
 export function listenToActiveLiveQuiz(
   studentClassId: string | undefined,
   callback: (quiz: Quiz | null) => void
 ): () => void {
-  try {
-    const q = query(
-      collection(db, "quizzes"),
-      where("status", "in", ["live", "scheduled"])
-    );
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const now = Date.now();
-        const liveQuizzes: Quiz[] = [];
-
-        snapshot.docs.forEach((docSnap) => {
-          const quiz = parseQuizDoc(docSnap);
-          if (!isQuizClassMatching(quiz.classId, studentClassId)) return;
-
-          if (quiz.status === "live" || quiz.isLive) {
-            if (quiz.endTime) {
-              const endMs = new Date(quiz.endTime).getTime();
-              if (endMs <= now) {
-                return;
-              }
-            }
-            liveQuizzes.push(quiz);
-          } else if (quiz.status === "scheduled" && quiz.startTime && quiz.endTime) {
-            const startMs = new Date(quiz.startTime).getTime();
-            const endMs = new Date(quiz.endTime).getTime();
-            if (now >= startMs && now <= endMs) {
-              liveQuizzes.push({ ...quiz, status: "live", isLive: true });
-            }
-          }
-        });
-
-        callback(liveQuizzes.length > 0 ? liveQuizzes[0] : null);
-      },
-      (err) => {
-        console.error("Quiz listener error:", err);
-        callback(null);
-      }
-    );
-
-    return unsubscribe;
-  } catch (e) {
-    console.error("Failed to setup listenToActiveLiveQuiz", e);
+  // Check cache first
+  if (
+    activeLiveQuizCache &&
+    activeLiveQuizCache.classId === studentClassId &&
+    Date.now() - activeLiveQuizCache.timestamp < LIVE_QUIZ_CACHE_TTL
+  ) {
+    callback(activeLiveQuizCache.data);
     return () => {};
   }
+
+  let isMounted = true;
+  async function checkLiveQuiz() {
+    try {
+      const q = query(
+        collection(db, "quizzes"),
+        where("status", "in", ["live", "scheduled"]),
+        limit(10)
+      );
+      const snapshot = await getDocs(q);
+      if (!isMounted) return;
+
+      const now = Date.now();
+      const liveQuizzes: Quiz[] = [];
+
+      snapshot.docs.forEach((docSnap) => {
+        const quiz = parseQuizDoc(docSnap);
+        if (!isQuizClassMatching(quiz.classId, studentClassId)) return;
+
+        if (quiz.status === "live" || quiz.isLive) {
+          if (quiz.endTime) {
+            const endMs = new Date(quiz.endTime).getTime();
+            if (endMs <= now) return;
+          }
+          liveQuizzes.push(quiz);
+        } else if (quiz.status === "scheduled" && quiz.startTime && quiz.endTime) {
+          const startMs = new Date(quiz.startTime).getTime();
+          const endMs = new Date(quiz.endTime).getTime();
+          if (now >= startMs && now <= endMs) {
+            liveQuizzes.push({ ...quiz, status: "live", isLive: true });
+          }
+        }
+      });
+
+      const result = liveQuizzes.length > 0 ? liveQuizzes[0] : null;
+      activeLiveQuizCache = { data: result, timestamp: Date.now(), classId: studentClassId };
+      callback(result);
+    } catch (e) {
+      console.error("Failed to check active live quiz", e);
+      if (isMounted) callback(null);
+    }
+  }
+
+  checkLiveQuiz();
+  return () => {
+    isMounted = false;
+  };
 }
 
 export async function getAllQuizzes(): Promise<Quiz[]> {
@@ -217,7 +232,8 @@ export async function getAllQuizzes(): Promise<Quiz[]> {
     return allQuizzesCache.data;
   }
   try {
-    const snapshot = await getDocs(collection(db, "quizzes"));
+    const q = query(collection(db, "quizzes"), limit(50));
+    const snapshot = await getDocs(q);
     if (snapshot.empty) return [];
     const quizzes = snapshot.docs.map((docSnap) => parseQuizDoc(docSnap));
     allQuizzesCache = { data: quizzes, timestamp: Date.now() };

@@ -75,6 +75,7 @@ import {
   updateChapter,
   deleteChapter,
   getAllQuestions,
+  getPaginatedQuestions,
   addQuestion,
   updateQuestion,
   deleteQuestion,
@@ -370,6 +371,58 @@ export default function AdminPage() {
     explanation: "",
   });
 
+  // Question Bank Pagination & Filtering State
+  const [lastQuestionDocId, setLastQuestionDocId] = useState<string | null>(null);
+  const [hasMoreQuestions, setHasMoreQuestions] = useState<boolean>(true);
+  const [loadingMoreQuestions, setLoadingMoreQuestions] = useState<boolean>(false);
+  const [isFilteredMode, setIsFilteredMode] = useState<boolean>(false);
+
+  // Fetch questions from Firestore with 20 items per page and active filters
+  const fetchFilteredQuestions = async (filters: { classId?: string; subjectId?: string; chapterId?: string }) => {
+    setQuestionsLoading(true);
+    try {
+      const res = await getPaginatedQuestions(20, null, filters);
+      setQuestions(res.questions);
+      setLastQuestionDocId(res.lastDocId);
+      setHasMoreQuestions(res.hasMore);
+      if (res.questions.length > 0) {
+        showToast(`${res.questions.length}টি প্রশ্ন লোড হয়েছে 📄`);
+      } else {
+        showToast("কোনো প্রশ্ন পাওয়া যায়নি");
+      }
+    } catch {
+      showToast("প্রশ্ন লোড করতে ব্যর্থ হয়েছে");
+    } finally {
+      setQuestionsLoading(false);
+    }
+  };
+
+  const handleLoadMoreQuestions = async () => {
+    if (loadingMoreQuestions || !hasMoreQuestions) return;
+    setLoadingMoreQuestions(true);
+    try {
+      const currentFilters = {
+        classId: questionClassFilter,
+        subjectId: questionSubjectFilter,
+        chapterId: questionChapterFilter,
+      };
+      const res = await getPaginatedQuestions(20, lastQuestionDocId, currentFilters);
+      if (res.questions.length > 0) {
+        setQuestions((prev) => [...prev, ...res.questions]);
+        setLastQuestionDocId(res.lastDocId);
+        setHasMoreQuestions(res.hasMore);
+        showToast(`${res.questions.length}টি পরবর্তী প্রশ্ন লোড হয়েছে! 📄`);
+      } else {
+        setHasMoreQuestions(false);
+        showToast("আর কোনো প্রশ্ন নেই");
+      }
+    } catch (e) {
+      showToast("পরবর্তী প্রশ্ন লোড করতে ব্যর্থ হয়েছে");
+    } finally {
+      setLoadingMoreQuestions(false);
+    }
+  };
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -480,12 +533,25 @@ export default function AdminPage() {
 
   // Lazy tab loading: fetch large collections (questions, users, logs, chapters) ONLY when tab is selected
   useEffect(() => {
-    if (activeNav === "questions" && questions.length === 0 && !questionsLoading) {
-      setQuestionsLoading(true);
-      getAllQuestions()
-        .then((q) => setQuestions(q))
-        .catch(() => {})
-        .finally(() => setQuestionsLoading(false));
+    if (activeNav === "questions") {
+      if (questions.length === 0 && !questionsLoading) {
+        setQuestionsLoading(true);
+        getPaginatedQuestions(20)
+          .then((res) => {
+            setQuestions(res.questions);
+            setLastQuestionDocId(res.lastDocId);
+            setHasMoreQuestions(res.hasMore);
+          })
+          .catch(() => {})
+          .finally(() => setQuestionsLoading(false));
+      }
+      if (allChapters.length === 0 && !chaptersLoading) {
+        setChaptersLoading(true);
+        getAllChapters(true)
+          .then((chs) => setAllChapters(chs))
+          .catch(() => {})
+          .finally(() => setChaptersLoading(false));
+      }
     } else if (activeNav === "users" && users.length === 0 && !usersLoading) {
       setUsersLoading(true);
       getAllStudents()
@@ -1407,11 +1473,15 @@ export default function AdminPage() {
     return true;
   });
 
-  const filteredQuestions = questions.filter((q) => {
+  const filteredQuestions = (questions || []).filter((q) => {
+    if (!q) return false;
     if (questionClassFilter !== "all" && q.classId !== questionClassFilter) return false;
     if (questionSubjectFilter !== "all" && q.subjectId !== questionSubjectFilter) return false;
     if (questionChapterFilter !== "all" && q.chapterId !== questionChapterFilter) return false;
-    if (searchQuery && !q.questionText.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery) {
+      const qText = String(q.questionText || "").toLowerCase();
+      if (!qText.includes(searchQuery.toLowerCase())) return false;
+    }
     return true;
   });
 
@@ -2008,9 +2078,11 @@ export default function AdminPage() {
                       <select
                         value={questionClassFilter}
                         onChange={(e) => {
-                          setQuestionClassFilter(e.target.value);
+                          const val = e.target.value;
+                          setQuestionClassFilter(val);
                           setQuestionSubjectFilter("all");
                           setQuestionChapterFilter("all");
+                          fetchFilteredQuestions({ classId: val, subjectId: "all", chapterId: "all" });
                         }}
                         className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-teal-400 font-bold focus:outline-none"
                       >
@@ -2027,8 +2099,10 @@ export default function AdminPage() {
                       <select
                         value={questionSubjectFilter}
                         onChange={(e) => {
-                          setQuestionSubjectFilter(e.target.value);
+                          const val = e.target.value;
+                          setQuestionSubjectFilter(val);
                           setQuestionChapterFilter("all");
+                          fetchFilteredQuestions({ classId: questionClassFilter, subjectId: val, chapterId: "all" });
                         }}
                         className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold focus:outline-none"
                       >
@@ -2047,13 +2121,30 @@ export default function AdminPage() {
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">৩. অধ্যায় ফিল্টার:</label>
                       <select
                         value={questionChapterFilter}
-                        onChange={(e) => setQuestionChapterFilter(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setQuestionChapterFilter(val);
+                          fetchFilteredQuestions({ classId: questionClassFilter, subjectId: questionSubjectFilter, chapterId: val });
+                        }}
                         className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-amber-400 font-bold focus:outline-none"
                       >
                         <option value="all">সকল অধ্যায়</option>
                         {(questionSubjectFilter === "all"
                           ? allChapters
-                          : allChapters.filter((c) => c.subjectId === questionSubjectFilter)
+                          : allChapters.filter((c) => {
+                              const chSub = (c.subjectId || "").toLowerCase().trim();
+                              const selSub = questionSubjectFilter.toLowerCase().trim();
+                              if (!chSub) return false;
+                              if (chSub === selSub) return true;
+                              // strip class prefix (e.g. "class9_10_") from both sides
+                              const stripPrefix = (s: string) => s.replace(/^class\d+(_\d+)?_/, "");
+                              const cleanCh = stripPrefix(chSub);
+                              const cleanSel = stripPrefix(selSub);
+                              if (cleanCh && cleanSel && cleanCh === cleanSel) return true;
+                              // partial contains check (e.g. subjectId "bangla" inside "class9_bangla_1st")
+                              if (chSub.includes(cleanSel) || selSub.includes(cleanCh)) return true;
+                              return false;
+                            })
                         )
                           .slice()
                           .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
@@ -2133,29 +2224,74 @@ export default function AdminPage() {
 
                             {/* Options Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                              {q.options.map((opt, oIdx) => (
-                                <div
-                                  key={oIdx}
-                                  className={`p-2 rounded-xl border flex items-center justify-between ${
-                                    oIdx === q.correctAnswer
-                                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold"
-                                      : "bg-slate-800/60 border-slate-700/60 text-slate-300"
-                                  }`}
-                                >
-                                  <span>{opt}</span>
-                                  {oIdx === q.correctAnswer && <Check width={14} height={14} className="text-emerald-400" />}
-                                </div>
-                              ))}
+                              {(Array.isArray(q.options) ? q.options : []).map((opt, oIdx) => {
+                                const optText =
+                                  typeof opt === "object" && opt !== null
+                                    ? String((opt as any).text || (opt as any).title || (opt as any).value || JSON.stringify(opt))
+                                    : String(opt ?? "");
+                                return (
+                                  <div
+                                    key={oIdx}
+                                    className={`p-2 rounded-xl border flex items-center justify-between ${
+                                      oIdx === q.correctAnswer
+                                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold"
+                                        : "bg-slate-800/60 border-slate-700/60 text-slate-300"
+                                    }`}
+                                  >
+                                    <span>{optText}</span>
+                                    {oIdx === q.correctAnswer && <Check width={14} height={14} className="text-emerald-400" />}
+                                  </div>
+                                );
+                              })}
                             </div>
 
                             {q.explanation && (
                               <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
-                                💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
+                                💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {String(q.explanation)}
                               </div>
                             )}
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* PAGINATION / LOAD MORE FOOTER */}
+                  {questions.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-800/80 bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+                      <div className="text-xs text-slate-400 font-bold flex items-center gap-1.5 flex-wrap">
+                        <span>মোট লোড করা প্রশ্ন: <strong className="text-teal-400 font-black">{questions.length}টি</strong></span>
+                        {filteredQuestions.length !== questions.length && (
+                          <span className="text-indigo-400 font-bold">({filteredQuestions.length}টি ফিল্টারে প্রদর্শিত)</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {hasMoreQuestions ? (
+                          <button
+                            onClick={handleLoadMoreQuestions}
+                            disabled={loadingMoreQuestions}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-500 hover:to-indigo-500 active:scale-95 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-lg shadow-teal-500/20 transition-all cursor-pointer"
+                          >
+                            {loadingMoreQuestions ? (
+                              <>
+                                <Loader2 width={14} height={14} className="animate-spin text-white" />
+                                <span>পরবর্তী ২০টি প্রশ্ন লোড হচ্ছে...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown width={14} height={14} />
+                                <span>পরবর্তী ২০টি প্রশ্ন লোড করুন (Next 20)</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400 px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-1.5">
+                            <CheckCircle width={14} height={14} className="text-emerald-400" />
+                            সবগুলো প্রশ্ন লোড সম্পন্ন হয়েছে
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -3610,7 +3746,7 @@ export default function AdminPage() {
                           </div>
 
                           <div className="grid grid-cols-2 gap-1.5 pl-7">
-                            {q.options.map((opt, oIdx) => (
+                            {(Array.isArray(q.options) ? q.options : []).map((opt, oIdx) => (
                               <div
                                 key={oIdx}
                                 className={`px-2 py-1 rounded-lg text-[10.5px] flex items-center justify-between ${
@@ -3619,7 +3755,7 @@ export default function AdminPage() {
                                     : "bg-slate-900 text-slate-400 border border-slate-800"
                                 }`}
                               >
-                                <span>{opt}</span>
+                                <span>{typeof opt === "object" && opt !== null ? String((opt as any).text || "") : String(opt ?? "")}</span>
                                 {oIdx === q.correctAnswer && (
                                   <Check width={12} height={12} className="text-emerald-400" />
                                 )}
@@ -3629,7 +3765,7 @@ export default function AdminPage() {
 
                           {q.explanation && (
                             <p className="text-[10px] text-slate-400 pl-7">
-                              💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
+                              💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {String(q.explanation)}
                             </p>
                           )}
                         </div>
@@ -3716,7 +3852,7 @@ export default function AdminPage() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-8">
-                      {q.options.map((opt, oIdx) => (
+                      {(Array.isArray(q.options) ? q.options : []).map((opt, oIdx) => (
                         <div
                           key={oIdx}
                           className={`p-2 rounded-xl text-xs flex items-center justify-between ${
@@ -3725,7 +3861,7 @@ export default function AdminPage() {
                               : "bg-slate-900 text-slate-400 border border-slate-800"
                           }`}
                         >
-                          <span>{opt}</span>
+                          <span>{typeof opt === "object" && opt !== null ? String((opt as any).text || "") : String(opt ?? "")}</span>
                           {oIdx === q.correctAnswer && (
                             <Check width={14} height={14} className="text-emerald-400" />
                           )}
@@ -3735,7 +3871,7 @@ export default function AdminPage() {
 
                     {q.explanation && (
                       <div className="p-2 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 pl-8">
-                        💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {q.explanation}
+                        💡 <span className="font-bold text-slate-300">ব্যাখ্যা:</span> {String(q.explanation)}
                       </div>
                     )}
                   </div>
@@ -4125,7 +4261,7 @@ export default function AdminPage() {
 
               <div className="space-y-2">
                 <label className="block text-slate-400 font-bold">অপশনসমূহ (৪টি) ও সঠিক উত্তর সিলেক্ট করুন:</label>
-                {editingQuestion.options.map((opt, i) => (
+                {(Array.isArray(editingQuestion.options) ? editingQuestion.options : []).map((opt, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <input
                       type="radio"
@@ -4136,9 +4272,9 @@ export default function AdminPage() {
                     />
                     <input
                       type="text"
-                      value={opt}
+                      value={typeof opt === "object" && opt !== null ? String((opt as any).text || "") : String(opt ?? "")}
                       onChange={(e) => {
-                        const newOpts = [...editingQuestion.options];
+                        const newOpts = [...(Array.isArray(editingQuestion.options) ? editingQuestion.options : [])];
                         newOpts[i] = e.target.value;
                         setEditingQuestion({ ...editingQuestion, options: newOpts });
                       }}

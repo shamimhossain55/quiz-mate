@@ -25,6 +25,18 @@ export async function getActiveBanners(): Promise<BannerSlide[]> {
   if (bannersCache && Date.now() - bannersCache.timestamp < BANNER_CACHE_TTL_MS) {
     return bannersCache.data;
   }
+  if (typeof window !== "undefined") {
+    try {
+      const ls = localStorage.getItem("qm_banners_cache");
+      if (ls) {
+        const parsed = JSON.parse(ls);
+        if (parsed.timestamp && Date.now() - parsed.timestamp < BANNER_CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          bannersCache = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {}
+  }
   try {
     const colRef = collection(db, "banners");
     const snapshot = await getDocs(colRef);
@@ -36,7 +48,11 @@ export async function getActiveBanners(): Promise<BannerSlide[]> {
       ...(docSnap.data() as Omit<BannerSlide, "id">),
     }));
     docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-    bannersCache = { data: docs, timestamp: Date.now() };
+    const cacheObj = { data: docs, timestamp: Date.now() };
+    bannersCache = cacheObj;
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem("qm_banners_cache", JSON.stringify(cacheObj)); } catch {}
+    }
     return docs;
   } catch (err) {
     console.error("Error fetching banners:", err);

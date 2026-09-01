@@ -7,6 +7,7 @@ import BottomNav from "@/components/layout/BottomNav";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import QuickActionsDock from "@/components/dashboard/QuickActionsDock";
 import BannerCarousel from "@/components/dashboard/BannerCarousel";
+import ContinueLearningSection from "@/components/dashboard/ContinueLearningSection";
 import SubjectGridSection, { SubjectItem } from "@/components/dashboard/SubjectGridSection";
 import { getSubjects } from "@/lib/firestore/subjects";
 import { getStudentProfile } from "@/lib/firestore/student";
@@ -340,7 +341,12 @@ export default function DashboardPage() {
           {/* 2. HERO PROMOTIONAL BANNER CAROUSEL */}
           <BannerCarousel slides={bannerList} />
 
-          {/* 3. CURRICULUM HUB (ALL SUBJECTS GRID WITH INTEGRATED PROGRESS BARS) */}
+          {/* 3. CONTINUE LEARNING (Only if user has an active subject in progress) */}
+          {subjectsList.some((s) => s.progress > 0 && s.progress < 100) && (
+            <ContinueLearningSection subjectsList={subjectsList} />
+          )}
+
+          {/* 4. CURRICULUM HUB (ALL SUBJECTS GRID WITH INTEGRATED PROGRESS BARS) */}
           <SubjectGridSection subjectsList={subjectsList} isLoading={isSubjectsLoading} />
 
           {/* Daily Missions are now accessible via the Mission button in QuickActionsDock */}

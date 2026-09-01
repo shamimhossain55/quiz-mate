@@ -9,6 +9,8 @@ import {
   query,
   where,
   orderBy,
+  limit,
+  startAfter,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase-client";
@@ -29,7 +31,7 @@ export type AdminUser = {
 };
 
 // ===== CACHING LAYER =====
-const ADMIN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+const ADMIN_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes cache
 let classesCache: { data: AdminClass[]; timestamp: number } | null = null;
 let chaptersCache: { data: AdminChapter[]; timestamp: number } | null = null;
 let studentsCache: { data: AdminUser[]; timestamp: number } | null = null;
@@ -281,7 +283,8 @@ export async function getAllStudents(force = false): Promise<AdminUser[]> {
     return studentsCache.data;
   }
   try {
-    const querySnapshot = await getDocs(collection(db, "students"));
+    const q = query(collection(db, "students"), limit(60));
+    const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return [];
     const list = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
@@ -424,7 +427,8 @@ export async function getAllQuizzes(force = false): Promise<AdminQuiz[]> {
     return quizzesCache.data;
   }
   try {
-    const querySnapshot = await getDocs(collection(db, "quizzes"));
+    const q = query(collection(db, "quizzes"), limit(60));
+    const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return [];
     const list = querySnapshot.docs.map((docSnap) => {
       const d = docSnap.data();
@@ -562,30 +566,136 @@ export async function deleteQuizDoc(id: string) {
   invalidateAdminCache("quizzes");
 }
 
-// ===== QUESTION OPERATIONS (SINGLE & BULK JSON) =====
+export function parseAdminQuestionDoc(docSnap: any): AdminQuestion {
+  const data = docSnap.data() || {};
+  let rawOptions = data.options;
+  let safeOptions: string[] = [];
+
+  if (Array.isArray(rawOptions)) {
+    safeOptions = rawOptions.map((opt) =>
+      typeof opt === "object" && opt !== null
+        ? String((opt as any).text || (opt as any).title || (opt as any).value || JSON.stringify(opt))
+        : String(opt ?? "")
+    );
+  } else if (typeof rawOptions === "object" && rawOptions !== null) {
+    safeOptions = Object.values(rawOptions).map((opt) =>
+      typeof opt === "object" && opt !== null
+        ? String((opt as any).text || (opt as any).title || (opt as any).value || JSON.stringify(opt))
+        : String(opt ?? "")
+    );
+  } else if (typeof rawOptions === "string" && rawOptions.trim()) {
+    try {
+      const parsed = JSON.parse(rawOptions);
+      if (Array.isArray(parsed)) {
+        safeOptions = parsed.map((opt) => String(opt ?? ""));
+      } else {
+        safeOptions = [rawOptions];
+      }
+    } catch {
+      safeOptions = [rawOptions];
+    }
+  }
+
+  if (safeOptions.length === 0) {
+    safeOptions = [
+      String(data.option1 || data.opt1 || data.a || "অপশন ১"),
+      String(data.option2 || data.opt2 || data.b || "অপশন ২"),
+      String(data.option3 || data.opt3 || data.c || "অপশন ৩"),
+      String(data.option4 || data.opt4 || data.d || "অপশন ৪"),
+    ];
+  }
+
+  const qText = String(data.questionText || data.question || data.title || "প্রশ্ন");
+  const numCorrect = Number(data.correctAnswer);
+  const correctAnswer = isNaN(numCorrect) ? 0 : Math.max(0, Math.min(safeOptions.length - 1, numCorrect));
+
+  return {
+    id: docSnap.id,
+    quizId: String(data.quizId || ""),
+    classId: String(data.classId || ""),
+    subjectId: String(data.subjectId || ""),
+    chapterId: String(data.chapterId || ""),
+    questionText: qText,
+    options: safeOptions,
+    correctAnswer,
+    explanation: String(data.explanation || data.desc || ""),
+  };
+}
+
 export async function getAllQuestions(force = false): Promise<AdminQuestion[]> {
   if (!force && questionsCache && Date.now() - questionsCache.timestamp < ADMIN_CACHE_TTL_MS) {
     return questionsCache.data;
   }
   try {
-    const querySnapshot = await getDocs(collection(db, "questions"));
+    const q = query(collection(db, "questions"), limit(60));
+    const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) return [];
-    const list = querySnapshot.docs.map((docSnap) => ({
-      id: docSnap.id,
-      quizId: docSnap.data().quizId,
-      classId: docSnap.data().classId,
-      subjectId: docSnap.data().subjectId,
-      chapterId: docSnap.data().chapterId,
-      questionText: docSnap.data().questionText || docSnap.data().question || "প্রশ্ন",
-      options: docSnap.data().options || [],
-      correctAnswer: docSnap.data().correctAnswer ?? 0,
-      explanation: docSnap.data().explanation || "",
-    }));
+    const list: AdminQuestion[] = querySnapshot.docs.map((docSnap) => parseAdminQuestionDoc(docSnap));
     questionsCache = { data: list, timestamp: Date.now() };
     return list;
   } catch (err) {
     console.error("Error fetching questions:", err);
     return [];
+  }
+}
+
+export async function getPaginatedQuestions(
+  limitCount = 20,
+  lastDocId?: string | null,
+  filters?: { classId?: string; subjectId?: string; chapterId?: string }
+): Promise<{ questions: AdminQuestion[]; lastDocId: string | null; hasMore: boolean }> {
+  try {
+    const constraints: any[] = [];
+
+    if (filters?.chapterId && filters.chapterId !== "all") {
+      constraints.push(where("chapterId", "==", filters.chapterId));
+    } else if (filters?.subjectId && filters.subjectId !== "all") {
+      const subId = filters.subjectId;
+      const cleanSub = subId.replace(/^class\d+(_\d+)?_/, "");
+      const candidates = Array.from(
+        new Set([
+          subId,
+          cleanSub,
+          `class6_${cleanSub}`,
+          `class7_${cleanSub}`,
+          `class8_${cleanSub}`,
+          `class9_${cleanSub}`,
+          `class10_${cleanSub}`,
+          `class9_10_${cleanSub}`,
+        ])
+      ).filter(Boolean);
+      constraints.push(where("subjectId", "in", candidates.slice(0, 10)));
+    } else if (filters?.classId && filters.classId !== "all") {
+      constraints.push(where("classId", "==", filters.classId));
+    }
+
+    if (lastDocId) {
+      const lastDocSnap = await getDoc(doc(db, "questions", lastDocId));
+      if (lastDocSnap.exists()) {
+        constraints.push(startAfter(lastDocSnap));
+      }
+    }
+
+    constraints.push(limit(limitCount));
+
+    const q = query(collection(db, "questions"), ...constraints);
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      return { questions: [], lastDocId: null, hasMore: false };
+    }
+
+    const list: AdminQuestion[] = querySnapshot.docs.map((docSnap) => parseAdminQuestionDoc(docSnap));
+    const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1];
+
+    return {
+      questions: list,
+      lastDocId: lastVisible ? lastVisible.id : null,
+      hasMore: querySnapshot.docs.length >= limitCount,
+    };
+  } catch (err) {
+    console.error("Error in getPaginatedQuestions:", err);
+    return { questions: [], lastDocId: null, hasMore: false };
   }
 }
 

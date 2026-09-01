@@ -42,8 +42,8 @@ export default function DashboardHeader({
   const { unreadMsgCount } = useFriendNotif();
   const currentPoints = student?.point || 0;
   const currentLevel = student?.level || 1;
-  const currentLevelXP = currentPoints % 250;
-  const xpPercentage = Math.min(100, Math.round((currentLevelXP / 250) * 100));
+  const currentLevelXP = currentPoints % 100;
+  const xpPercentage = Math.min(100, Math.round((currentLevelXP / 100) * 100));
 
   const classNameText = CLASS_NAMES[student?.classId || "class6"] || student?.classId || "ষষ্ঠ শ্রেণী";
   const groupText = student?.group && student.group !== "all" ? ` (${GROUP_NAMES[student.group] || student.group})` : "";

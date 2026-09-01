@@ -20,18 +20,16 @@ interface ContinueLearningSectionProps {
 export default function ContinueLearningSection({ subjectsList = [] }: ContinueLearningSectionProps) {
   const router = useRouter();
 
-  // Find active subject in progress (<100% and >0%) or default to first subject
+  if (!subjectsList || subjectsList.length === 0) {
+    return null;
+  }
+
+  // Find active subject in progress (<100% and >0%) or fallback to the student's first real subject
   const activeSubject =
     subjectsList.find((s) => s.progress > 0 && s.progress < 100) ||
-    subjectsList[0] || {
-      id: "math",
-      name: "সাধারণ গণিত",
-      slug: "general-math",
-      progress: 45,
-      completedChapters: 3,
-      chaptersCount: 8,
-      gradient: "linear-gradient(135deg, #0F766E 0%, #0D9488 50%, #0369A1 100%)",
-    };
+    subjectsList[0];
+
+  if (!activeSubject) return null;
 
   return (
     <div

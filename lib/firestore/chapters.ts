@@ -4,6 +4,7 @@ import {
   orderBy,
   query,
   where,
+  limit,
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase-client";
@@ -11,11 +12,16 @@ import { Chapter } from "@/types/firestore";
 
 const chaptersBySubjectCache = new Map<string, { data: Chapter[]; timestamp: number }>();
 let chaptersMemoryCache: { data: Chapter[]; timestamp: number } | null = null;
-const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export function clearChapterCache(): void {
   chaptersMemoryCache = null;
   chaptersBySubjectCache.clear();
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem("qm_all_chapters_cache");
+    } catch {}
+  }
 }
 
 export async function getChapters(
@@ -28,6 +34,20 @@ export async function getChapters(
   const cached = chaptersBySubjectCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.data;
+  }
+
+  // Check localStorage
+  if (typeof window !== "undefined") {
+    try {
+      const lsCached = localStorage.getItem(`qm_chapters_${cacheKey}`);
+      if (lsCached) {
+        const parsed = JSON.parse(lsCached);
+        if (parsed.timestamp && Date.now() - parsed.timestamp < CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          chaptersBySubjectCache.set(cacheKey, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {}
   }
 
   const candidatesSet = new Set<string>([
@@ -53,7 +73,8 @@ export async function getChapters(
   try {
     const q = query(
       collection(db, "chapters"),
-      where("subjectId", "in", candidates.slice(0, 10))
+      where("subjectId", "in", candidates.slice(0, 10)),
+      limit(50)
     );
 
     const snapshot = await getDocs(q);
@@ -64,7 +85,11 @@ export async function getChapters(
         ...(docSnap.data() as Omit<Chapter, "id">),
       }));
       docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-      chaptersBySubjectCache.set(cacheKey, { data: docs, timestamp: Date.now() });
+      const cacheObj = { data: docs, timestamp: Date.now() };
+      chaptersBySubjectCache.set(cacheKey, cacheObj);
+      if (typeof window !== "undefined") {
+        try { localStorage.setItem(`qm_chapters_${cacheKey}`, JSON.stringify(cacheObj)); } catch {}
+      }
       return docs;
     }
     
@@ -80,6 +105,19 @@ export async function getAllChapters(): Promise<Chapter[]> {
   if (chaptersMemoryCache && Date.now() - chaptersMemoryCache.timestamp < CACHE_TTL_MS) {
     return chaptersMemoryCache.data;
   }
+  // Check localStorage
+  if (typeof window !== "undefined") {
+    try {
+      const lsCached = localStorage.getItem("qm_all_chapters_cache");
+      if (lsCached) {
+        const parsed = JSON.parse(lsCached);
+        if (parsed.timestamp && Date.now() - parsed.timestamp < CACHE_TTL_MS && Array.isArray(parsed.data)) {
+          chaptersMemoryCache = parsed;
+          return parsed.data;
+        }
+      }
+    } catch {}
+  }
   try {
     const snapshot = await getDocs(collection(db, "chapters"));
     if (snapshot.empty) return [];
@@ -88,10 +126,14 @@ export async function getAllChapters(): Promise<Chapter[]> {
       ...(docSnap.data() as Omit<Chapter, "id">),
     }));
     docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-    chaptersMemoryCache = {
+    const cacheObj = {
       data: docs,
       timestamp: Date.now(),
     };
+    chaptersMemoryCache = cacheObj;
+    if (typeof window !== "undefined") {
+      try { localStorage.setItem("qm_all_chapters_cache", JSON.stringify(cacheObj)); } catch {}
+    }
     return docs;
   } catch (err) {
     console.error("Error fetching all chapters:", err);
