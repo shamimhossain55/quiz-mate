@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -359,6 +359,61 @@ export default function AdminPage() {
   const [questionClassFilter, setQuestionClassFilter] = useState<string>("all");
   const [questionSubjectFilter, setQuestionSubjectFilter] = useState<string>("all");
   const [questionChapterFilter, setQuestionChapterFilter] = useState<string>("all");
+
+  // Filtered Subjects for Question Bank
+  const questionBankAvailableSubjects = useMemo(() => {
+    if (questionClassFilter === "all") return subjects;
+    return subjects.filter((s) => s.classId === questionClassFilter);
+  }, [subjects, questionClassFilter]);
+
+  // Strict & Deduplicated Filtered Chapters for Question Bank
+  const questionBankAvailableChapters = useMemo(() => {
+    let list: AdminChapter[] = [];
+
+    if (questionSubjectFilter !== "all") {
+      const selSub = subjects.find((s) => s.id === questionSubjectFilter);
+      const selSubId = (questionSubjectFilter || "").toLowerCase().trim();
+      const selSlug = (selSub?.slug || "").toLowerCase().trim();
+
+      list = allChapters.filter((c) => {
+        const chSub = (c.subjectId || "").toLowerCase().trim();
+        if (!chSub) return false;
+        if (chSub === selSubId) return true;
+        if (selSlug && chSub === selSlug) return true;
+        if (selSub && (c.subjectId === selSub.id || (selSub.slug && c.subjectId === selSub.slug))) return true;
+        return false;
+      });
+    } else if (questionClassFilter !== "all") {
+      const classSubjects = subjects.filter((s) => s.classId === questionClassFilter);
+      const validSubIds = new Set(
+        classSubjects.flatMap((s) => [s.id?.toLowerCase().trim(), s.slug?.toLowerCase().trim()].filter(Boolean))
+      );
+      list = allChapters.filter((c) => {
+        const chSub = (c.subjectId || "").toLowerCase().trim();
+        return chSub && validSubIds.has(chSub);
+      });
+    } else {
+      list = allChapters;
+    }
+
+    // Deduplicate by ID and unique (chapterNo + name) to never show duplicate entries
+    const seenIds = new Set<string>();
+    const seenKeys = new Set<string>();
+    const deduped: AdminChapter[] = [];
+
+    for (const ch of list) {
+      if (!ch.id || seenIds.has(ch.id)) continue;
+      const key = `${ch.chapterNo}_${(ch.name || "").trim().toLowerCase()}`;
+      if (seenKeys.has(key)) continue;
+      seenIds.add(ch.id);
+      seenKeys.add(key);
+      deduped.push(ch);
+    }
+
+    return deduped.sort(
+      (a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0)
+    );
+  }, [allChapters, subjects, questionSubjectFilter, questionClassFilter]);
 
   const [isAddQuestionOpen, setIsAddQuestionOpen] = useState(false);
   const [newQuestion, setNewQuestion] = useState({
@@ -2107,10 +2162,7 @@ export default function AdminPage() {
                         className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-indigo-400 font-bold focus:outline-none"
                       >
                         <option value="all">সকল বিষয়</option>
-                        {(questionClassFilter === "all"
-                          ? subjects
-                          : subjects.filter((s) => s.classId === questionClassFilter)
-                        ).map((s) => (
+                        {questionBankAvailableSubjects.map((s) => (
                           <option key={s.id} value={s.id}>{s.name}</option>
                         ))}
                       </select>
@@ -2118,7 +2170,9 @@ export default function AdminPage() {
 
                     {/* Chapter Filter */}
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-1">৩. অধ্যায় ফিল্টার:</label>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">
+                        ৩. অধ্যায় ফিল্টার: {questionSubjectFilter !== "all" && `(${questionBankAvailableChapters.length}টি)`}
+                      </label>
                       <select
                         value={questionChapterFilter}
                         onChange={(e) => {
@@ -2129,28 +2183,9 @@ export default function AdminPage() {
                         className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-amber-400 font-bold focus:outline-none"
                       >
                         <option value="all">সকল অধ্যায়</option>
-                        {(questionSubjectFilter === "all"
-                          ? allChapters
-                          : allChapters.filter((c) => {
-                              const chSub = (c.subjectId || "").toLowerCase().trim();
-                              const selSub = questionSubjectFilter.toLowerCase().trim();
-                              if (!chSub) return false;
-                              if (chSub === selSub) return true;
-                              // strip class prefix (e.g. "class9_10_") from both sides
-                              const stripPrefix = (s: string) => s.replace(/^class\d+(_\d+)?_/, "");
-                              const cleanCh = stripPrefix(chSub);
-                              const cleanSel = stripPrefix(selSub);
-                              if (cleanCh && cleanSel && cleanCh === cleanSel) return true;
-                              // partial contains check (e.g. subjectId "bangla" inside "class9_bangla_1st")
-                              if (chSub.includes(cleanSel) || selSub.includes(cleanCh)) return true;
-                              return false;
-                            })
-                        )
-                          .slice()
-                          .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
-                          .map((ch) => (
-                            <option key={ch.id} value={ch.id}>অধ্যায় {ch.chapterNo}: {ch.name}</option>
-                          ))}
+                        {questionBankAvailableChapters.map((ch) => (
+                          <option key={ch.id} value={ch.id}>অধ্যায় {ch.chapterNo}: {ch.name}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -2171,7 +2206,7 @@ export default function AdminPage() {
                   ) : (
                     <div className="grid grid-cols-1 gap-3">
                       {filteredQuestions.map((q, idx) => {
-                        const sub = subjects.find((s) => s.id === q.subjectId);
+                        const sub = subjects.find((s) => s.id === q.subjectId || s.slug === q.subjectId);
                         const ch = allChapters.find((c) => c.id === q.chapterId);
                         const clsName = classes.find((c) => c.id === q.classId)?.name;
 
@@ -3581,15 +3616,30 @@ export default function AdminPage() {
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-bold focus:outline-none"
                   >
                     <option value="">সম্পূর্ণ বিষয় / সকল অধ্যায়</option>
-                    {allChapters
-                      .filter((ch) => quizForm.subjectId && ch.subjectId === quizForm.subjectId)
-                      .slice()
-                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
-                      .map((ch) => (
-                        <option key={ch.id} value={ch.id}>
-                          অধ্যায় {ch.chapterNo}: {ch.name}
-                        </option>
-                      ))}
+                    {(() => {
+                      const selSub = subjects.find((s) => s.id === quizForm.subjectId);
+                      const selSubId = (quizForm.subjectId || "").toLowerCase().trim();
+                      const selSlug = (selSub?.slug || "").toLowerCase().trim();
+                      const list = allChapters.filter((ch) => {
+                        const chSub = (ch.subjectId || "").toLowerCase().trim();
+                        if (!chSub) return false;
+                        return chSub === selSubId || (selSlug && chSub === selSlug) || (selSub && ch.subjectId === selSub.id);
+                      });
+                      const seen = new Set<string>();
+                      return list
+                        .filter((ch) => {
+                          const key = `${ch.chapterNo}_${(ch.name || "").trim().toLowerCase()}`;
+                          if (seen.has(key)) return false;
+                          seen.add(key);
+                          return true;
+                        })
+                        .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
+                        .map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            অধ্যায় {ch.chapterNo}: {ch.name}
+                          </option>
+                        ));
+                    })()}
                   </select>
                 </div>
               </div>
@@ -3968,16 +4018,31 @@ export default function AdminPage() {
                     onChange={(e) => setBulkMeta({ ...bulkMeta, chapterId: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-amber-300 font-bold focus:outline-none focus:border-amber-400"
                   >
-                    <option value="">অধ্যায় সিলেক্ট করুন (অপশনাল)</option>
-                    {allChapters
-                      .filter((c) => bulkMeta.subjectId && c.subjectId === bulkMeta.subjectId)
-                      .slice()
-                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
-                      .map((ch) => (
-                        <option key={ch.id} value={ch.id}>
-                          অধ্যায় {ch.chapterNo}: {ch.name}
-                        </option>
-                      ))}
+                    <option value="">অধ্যায় সিলেক্ট করুন (ঐচ্ছিক)</option>
+                    {(() => {
+                      const selSub = subjects.find((s) => s.id === bulkMeta.subjectId);
+                      const selSubId = (bulkMeta.subjectId || "").toLowerCase().trim();
+                      const selSlug = (selSub?.slug || "").toLowerCase().trim();
+                      const list = allChapters.filter((c) => {
+                        const chSub = (c.subjectId || "").toLowerCase().trim();
+                        if (!chSub) return false;
+                        return chSub === selSubId || (selSlug && chSub === selSlug) || (selSub && c.subjectId === selSub.id);
+                      });
+                      const seen = new Set<string>();
+                      return list
+                        .filter((ch) => {
+                          const key = `${ch.chapterNo}_${(ch.name || "").trim().toLowerCase()}`;
+                          if (seen.has(key)) return false;
+                          seen.add(key);
+                          return true;
+                        })
+                        .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
+                        .map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            অধ্যায় {ch.chapterNo}: {ch.name}
+                          </option>
+                        ));
+                    })()}
                   </select>
                 </div>
               </div>
@@ -4087,15 +4152,30 @@ export default function AdminPage() {
                     className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-amber-300 font-bold focus:outline-none"
                   >
                     <option value="">অধ্যায় নির্বাচন করুন (ঐচ্ছিক)</option>
-                    {allChapters
-                      .filter((c) => newQuestion.subjectId && c.subjectId === newQuestion.subjectId)
-                      .slice()
-                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
-                      .map((ch) => (
-                        <option key={ch.id} value={ch.id}>
-                          অধ্যায় {ch.chapterNo}: {ch.name}
-                        </option>
-                      ))}
+                    {(() => {
+                      const selSub = subjects.find((s) => s.id === newQuestion.subjectId);
+                      const selSubId = (newQuestion.subjectId || "").toLowerCase().trim();
+                      const selSlug = (selSub?.slug || "").toLowerCase().trim();
+                      const list = allChapters.filter((c) => {
+                        const chSub = (c.subjectId || "").toLowerCase().trim();
+                        if (!chSub) return false;
+                        return chSub === selSubId || (selSlug && chSub === selSlug) || (selSub && c.subjectId === selSub.id);
+                      });
+                      const seen = new Set<string>();
+                      return list
+                        .filter((ch) => {
+                          const key = `${ch.chapterNo}_${(ch.name || "").trim().toLowerCase()}`;
+                          if (seen.has(key)) return false;
+                          seen.add(key);
+                          return true;
+                        })
+                        .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
+                        .map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            অধ্যায় {ch.chapterNo}: {ch.name}
+                          </option>
+                        ));
+                    })()}
                   </select>
                 </div>
               </div>
@@ -4235,15 +4315,30 @@ export default function AdminPage() {
                     className="w-full px-2.5 py-2 bg-slate-800 border border-amber-500/50 rounded-xl text-amber-300 font-bold focus:outline-none"
                   >
                     <option value="">অধ্যায় সিলেক্ট করুন (ঐচ্ছিক)</option>
-                    {allChapters
-                      .filter((c) => editingQuestion.subjectId && c.subjectId === editingQuestion.subjectId)
-                      .slice()
-                      .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
-                      .map((ch) => (
-                        <option key={ch.id} value={ch.id}>
-                          অধ্যায় {ch.chapterNo}: {ch.name}
-                        </option>
-                      ))}
+                    {(() => {
+                      const selSub = subjects.find((s) => s.id === editingQuestion.subjectId);
+                      const selSubId = (editingQuestion.subjectId || "").toLowerCase().trim();
+                      const selSlug = (selSub?.slug || "").toLowerCase().trim();
+                      const list = allChapters.filter((c) => {
+                        const chSub = (c.subjectId || "").toLowerCase().trim();
+                        if (!chSub) return false;
+                        return chSub === selSubId || (selSlug && chSub === selSlug) || (selSub && c.subjectId === selSub.id);
+                      });
+                      const seen = new Set<string>();
+                      return list
+                        .filter((ch) => {
+                          const key = `${ch.chapterNo}_${(ch.name || "").trim().toLowerCase()}`;
+                          if (seen.has(key)) return false;
+                          seen.add(key);
+                          return true;
+                        })
+                        .sort((a, b) => (Number(a.chapterNo ?? a.order) || 0) - (Number(b.chapterNo ?? b.order) || 0))
+                        .map((ch) => (
+                          <option key={ch.id} value={ch.id}>
+                            অধ্যায় {ch.chapterNo}: {ch.name}
+                          </option>
+                        ));
+                    })()}
                   </select>
                 </div>
               </div>

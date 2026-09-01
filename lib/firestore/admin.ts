@@ -652,18 +652,22 @@ export async function getPaginatedQuestions(
     } else if (filters?.subjectId && filters.subjectId !== "all") {
       const subId = filters.subjectId;
       const cleanSub = subId.replace(/^class\d+(_\d+)?_/, "");
-      const candidates = Array.from(
-        new Set([
-          subId,
-          cleanSub,
-          `class6_${cleanSub}`,
-          `class7_${cleanSub}`,
-          `class8_${cleanSub}`,
-          `class9_${cleanSub}`,
-          `class10_${cleanSub}`,
-          `class9_10_${cleanSub}`,
-        ])
-      ).filter(Boolean);
+      const selectedClass = filters.classId && filters.classId !== "all" ? filters.classId : null;
+      
+      const candidateList = selectedClass
+        ? [subId, cleanSub, `${selectedClass}_${cleanSub}`]
+        : [
+            subId,
+            cleanSub,
+            `class6_${cleanSub}`,
+            `class7_${cleanSub}`,
+            `class8_${cleanSub}`,
+            `class9_${cleanSub}`,
+            `class10_${cleanSub}`,
+            `class9_10_${cleanSub}`,
+          ];
+      
+      const candidates = Array.from(new Set(candidateList)).filter(Boolean);
       constraints.push(where("subjectId", "in", candidates.slice(0, 10)));
     } else if (filters?.classId && filters.classId !== "all") {
       constraints.push(where("classId", "==", filters.classId));
